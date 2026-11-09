@@ -296,13 +296,23 @@ Carga (`mongo/01_setup_e_carga.js`): 5 laudos e 27 casos, 32 documentos no total
 
 ![Carga do MongoDB](evidencias/20_mongo_carga_32_documentos.png)
 
-Relatório 3 (`aggregate`) e totais (`mongo/02_consultas.js`), idênticos ao relatório 3 do Oracle:
+Relatório 1 (`find`): os 10 direitos `ELEGIVEL` de Lucas Almeida, igual ao relatório 1 do Oracle.
 
-![Relatório 3 e totais no MongoDB](evidencias/21_mongo_relatorio3_totais.png)
+![Relatório 1 no MongoDB](evidencias/21_mongo_relatorio1_elegiveis_lucas.png)
+
+Relatório 2 (`find`): 17 casos em andamento com prazo até 05/12/2026, igual ao relatório 2 do Oracle.
+
+![Relatório 2 no MongoDB](evidencias/22_mongo_relatorio2_prazos.png)
+
+Relatório 3 (`aggregate`) e totais, idênticos ao relatório 3 do Oracle:
+
+![Relatório 3 e totais no MongoDB](evidencias/23_mongo_relatorio3_totais.png)
 
 Database `citizentech` com as collections `casos` (27 documentos) e `laudos` (5):
 
-![Collections no Compass](evidencias/22_mongo_colecoes_compass.png)
+![Collections no Compass](evidencias/24_mongo_colecoes_compass.png)
+
+Nesses prints os relatórios 1 e 2 foram impressos com `print(JSON.stringify(d))`, um documento por linha, para caber em uma tela; os filtros e a ordenação são os mesmos de `mongo/02_consultas.js`.
 
 ---
 
