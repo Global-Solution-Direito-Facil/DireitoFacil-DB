@@ -4,7 +4,7 @@ Global Solution 2026/2 · CitizenTech · 2TDSPG
 Disciplina: **Mastering Relational and Non-Relational Database**
 Entrega: 19/11/2026, até 23h55 (Portal do Aluno)
 
-> **Status deste repositório:** a parte **Oracle está completa**, executada e documentada com prints (seção 6.2 e `documentacaoDB.pdf`). A parte **MongoDB** (`mongo/`) será adicionada em uma próxima etapa.
+> **Status deste repositório:** as partes **Oracle** e **MongoDB** estão completas, executadas e documentadas com prints (seções 6.2 e 6.3 e `documentacaoDB.pdf`).
 
 ---
 
@@ -41,13 +41,12 @@ Base legal usada na regra de TEA: Lei 12.764/2012, art. 1º, §2º — a pessoa 
 | Item | O que é |
 |---|---|
 | `00_DROP.sql` a `08_EXPORTA_JSON.sql` | Scripts Oracle, na ordem de execução |
+| `mongo/` | Scripts MongoDB: carga de 2 collections (32 documentos) e as 3 consultas |
 | `flyway/` | O mesmo banco em migrations `V1` a `V5`, sem comandos de SQL*Plus, para a API Java |
 | `evidencias/` | Prints da execução no Oracle SQL Developer |
 | `documentacaoDB.pdf` | Documentação com os requisitos atendidos e todas as evidências |
 
 ### MongoDB (mongosh ou Compass → `_MONGOSH`)
-
-> Os scripts abaixo serão adicionados a este repositório na próxima etapa.
 
 | # | Arquivo | O que faz |
 |---|---|---|
@@ -126,9 +125,6 @@ As funções/procedures do `05` (avulsas) são movidas para os pacotes no `06` e
 ---
 
 ## 4. Mapeamento relacional → documental (Oracle → MongoDB)
-
-> Os scripts MongoDB entram na próxima etapa; esta seção descreve o mapeamento adotado.
-
 Não há integração automática: a transição é demonstrada por scripts. O `FN_CASO_TO_JSON` mostra como cada caso do Oracle vira um documento.
 
 | Oracle | MongoDB | Como |
@@ -200,8 +196,8 @@ Totais: **27 casos**, **5 laudos** e **5 documentos** (32 documentos no Mongo, j
 1. Explicar o problema e o modelo → seções 1 e 3
 2. Executar função e procedure → `05`, teste 1 (matriz) e teste 2 (motivo)
 3. Gatilho, auditoria e pacotes → `05` testes 4 e 5; `06` testes 5 a 7
-4. Criar collections e inserir documentos → `mongo/01_setup_e_carga.js` (próxima etapa)
-5. 3 relatórios e comparação → `07_RELATORIOS_ORACLE.sql` × `mongo/02_consultas.js` (MongoDB: próxima etapa)
+4. Criar collections e inserir documentos → `mongo/01_setup_e_carga.js`
+5. 3 relatórios e comparação → `07_RELATORIOS_ORACLE.sql` × `mongo/02_consultas.js`
 6. Justificar a transição → seção 4
 
 ### 6.1 Como testar no Oracle SQL Developer
@@ -294,6 +290,20 @@ Banco intacto após o `ROLLBACK` do teste:
 
 ![Banco intacto](evidencias/19_banco_intacto_apos_rollback.png)
 
+### 6.3 Evidências do MongoDB (MongoDB Compass, `_MONGOSH`)
+
+Carga (`mongo/01_setup_e_carga.js`): 5 laudos e 27 casos, 32 documentos no total.
+
+![Carga do MongoDB](evidencias/20_mongo_carga_32_documentos.png)
+
+Relatório 3 (`aggregate`) e totais (`mongo/02_consultas.js`), idênticos ao relatório 3 do Oracle:
+
+![Relatório 3 e totais no MongoDB](evidencias/21_mongo_relatorio3_totais.png)
+
+Database `citizentech` com as collections `casos` (27 documentos) e `laudos` (5):
+
+![Collections no Compass](evidencias/22_mongo_colecoes_compass.png)
+
 ---
 
 ## 7. Para o time de Java (JPA, JWT, RabbitMQ)
@@ -351,7 +361,7 @@ Banco intacto após o `ROLLBACK` do teste:
 ## 8. Status e pendências
 
 - **Oracle:** os scripts `00` a `08` foram executados na ordem no Oracle SQL Developer, sem erros de compilação, e os resultados batem com as seções 5 e 6.1 (evidências na seção 6.2). Os mesmos scripts e as migrations do `flyway/` também foram validados do zero em Oracle Free (23ai) via SQL*Plus; nesse cliente use `SET SQLBLANKLINES ON` (o SQL Developer não precisa).
-- **MongoDB:** scripts e relatórios comparativos serão adicionados na próxima etapa.
+- **MongoDB:** os scripts `mongo/01_setup_e_carga.js` e `mongo/02_consultas.js` foram executados no MongoDB (Compass, `_MONGOSH`); a carga criou 2 collections com 32 documentos e os resultados dos relatórios batem com os do Oracle (seção 5). O Mongo guarda as datas em UTC (`2026-11-05T00:00:00Z`) e o `DATE` do Oracle não tem fuso, o que não altera nenhum resultado.
 - **Catálogo de direitos:** os valores abaixo foram conferidos em 09/11/2026 em fontes secundárias (notícias e sites jurídicos); antes da entrega final, reconfirme nos sites oficiais (gov.br, INSS, ANEEL, Receita Federal). Por isso todos os direitos seguem com `STA_VERIFICACAO = 'CONFIRMAR'` até a revisão do Compliance.
 
 | Item no banco | Valor | Base | Fonte consultada |
@@ -369,7 +379,7 @@ Ressalvas: (1) o `POSSIVEL` (tolerância de 20% sobre o limite) é uma escolha d
 
 ## 9. Uso de IA generativa (declaração exigida pelo PDF da Global Solution)
 
-Ferramenta: **Claude (Anthropic)**, usada como apoio para gerar o rascunho dos scripts SQL e deste README, a partir dos requisitos da disciplina e do padrão da entrega anterior (CLYVO VET). O código foi executado e os resultados conferidos pelo integrante responsável pelo banco, conforme as evidências da seção 6.2.
+Ferramenta: **Claude (Anthropic)**, usada como apoio para gerar o rascunho dos scripts SQL e deste README, a partir dos requisitos da disciplina e do padrão da entrega anterior (CLYVO VET). O código SQL e JavaScript foi executado e os resultados conferidos pelo integrante responsável pelo banco, conforme as evidências da seção 6.2.
 
 ## 10. Integrantes
 
