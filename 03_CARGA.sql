@@ -22,11 +22,11 @@ END;
 /
 
 ------------------------------------------------------------
--- SALARIO MINIMO (confirmar valores no site oficial antes da entrega)
+-- SALARIO MINIMO (valor de 2026 conferido em 09/11/2026; reconfirmar no site oficial)
 ------------------------------------------------------------
 BEGIN
     PRC_CARGA_SALARIO_MINIMO(2025, 1518.00, 'Decreto anual do salario minimo - confirmar');
-    PRC_CARGA_SALARIO_MINIMO(2026, 1621.00, 'Decreto anual do salario minimo - confirmar');
+    PRC_CARGA_SALARIO_MINIMO(2026, 1621.00, 'Decreto 12.797/2025 (DOU 24/12/2025)');
 END;
 /
 

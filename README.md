@@ -1,6 +1,6 @@
 # Direito Fácil — Banco de Dados (Oracle PL/SQL + MongoDB)
 
-Global Solution 2026/2 · CitizenTech · 2TDS
+Global Solution 2026/2 · CitizenTech · 2TDSPG
 Disciplina: **Mastering Relational and Non-Relational Database**
 Entrega: 19/11/2026, até 23h55 (Portal do Aluno)
 
@@ -352,7 +352,19 @@ Banco intacto após o `ROLLBACK` do teste:
 
 - **Oracle:** os scripts `00` a `08` foram executados na ordem no Oracle SQL Developer, sem erros de compilação, e os resultados batem com as seções 5 e 6.1 (evidências na seção 6.2). Os mesmos scripts e as migrations do `flyway/` também foram validados do zero em Oracle Free (23ai) via SQL*Plus; nesse cliente use `SET SQLBLANKLINES ON` (o SQL Developer não precisa).
 - **MongoDB:** scripts e relatórios comparativos serão adicionados na próxima etapa.
-- **Catálogo de direitos:** o salário mínimo (`03_CARGA.sql`), os limites de renda e as bases legais precisam ser reconfirmados nos sites oficiais. Todos os direitos entram com `STA_VERIFICACAO = 'CONFIRMAR'` até a revisão do Compliance.
+- **Catálogo de direitos:** os valores abaixo foram conferidos em 09/11/2026 em fontes secundárias (notícias e sites jurídicos); antes da entrega final, reconfirme nos sites oficiais (gov.br, INSS, ANEEL, Receita Federal). Por isso todos os direitos seguem com `STA_VERIFICACAO = 'CONFIRMAR'` até a revisão do Compliance.
+
+| Item no banco | Valor | Base | Fonte consultada |
+|---|---|---|---|
+| Salário mínimo 2026 | R$ 1.621,00 | Decreto 12.797/2025 | [InfoMoney](https://www.infomoney.com.br/politica/quando-comeca-a-valer-o-novo-salario-minimo-governo-publica-valor-para-2026/) |
+| `BPC_IDOSO` e `BPC_PCD` | renda per capita até 1/4 do SM (R$ 405,25) | Lei 8.742/1993, art. 20, §3º (Lei 14.176/2021) | [Barbieri Advogados](https://www.barbieriadvogados.com/bpc-loas-requisitos-como-solicitar/) |
+| `TARIFA_SOCIAL_ENERGIA` e `CADUNICO` | até 1/2 SM per capita | Lei 12.212/2010 | [TNH1](https://www.tnh1.com.br/noticia/nid/entenda-as-novas-regras-da-tarifa-social-de-energia-eletrica/) |
+| `BOLSA_FAMILIA` | até R$ 218 per capita (guardado como 0,135 SM) | Lei 14.601/2023 | [O Povo](https://opovo.com.br/trends/bolsa-familia-2026-calendarios-e-valores-dos-pagamentos-em-fevereiro/) |
+| `PASSE_LIVRE_PCD` | até 1 SM per capita | Lei 8.899/1994; Portaria Interministerial MDIC nº 2/2026 | [Legisweb](https://www.legisweb.com.br/legislacao/?id=491706) |
+| `PASSE_IDOSO_INTERESTADUAL` | até 2 SM | Lei 10.741/2003, art. 40, I | [Dizer o Direito](https://www.dizerodireito.com.br/2019/03/idosos-que-gozam-de-gratuidade-no.html) |
+| `ISENCAO_IR_65MAIS` | parcela isenta de R$ 1.903,98/mês sobre aposentadoria e pensão | Lei 7.713/1988, art. 6º, XV | [AMDJUS](https://amdjus.com.br/descubra-as-regras-para-declaracao-do-imposto-de-renda-em-2026-por-aposentados/) |
+
+Ressalvas: (1) o `POSSIVEL` (tolerância de 20% sobre o limite) é uma escolha do projeto para sinalizar renda próxima do limite; o BPC pode ser concedido até 1/2 SM com prova de vulnerabilidade, mas isso exige análise caso a caso; (2) não foi confirmado se a Lei 15.270/2025 alterou o inciso XV do art. 6º da Lei 7.713; (3) o limite do Bolsa Família é um valor fixo em reais, aproximado aqui como fração do SM.
 - Dados, pessoas e laudos são **fictícios**.
 
 ## 9. Uso de IA generativa (declaração exigida pelo PDF da Global Solution)
@@ -363,4 +375,4 @@ Ferramenta: **Claude (Anthropic)**, usada como apoio para gerar o rascunho dos s
 
 | RM | Nome completo | Turma |
 |---|---|---|
-| RM565594 | João Vitor Biribilli Ravelli | 2TDS |
+| RM565594 | João Vitor Biribilli Ravelli | 2TDSPG |
