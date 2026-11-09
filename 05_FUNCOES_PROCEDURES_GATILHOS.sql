@@ -61,6 +61,7 @@ IS
     v_idade    NUMBER;
     v_pcd      NUMBER;
     v_tea      NUMBER;
+    v_tipo     NUMBER;
     v_fracao   NUMBER;
     v_crit     T_DF_CRITERIO_DIREITO%ROWTYPE;
     v_txt_f    VARCHAR2(10);
@@ -83,6 +84,15 @@ BEGIN
     FROM T_DF_LAUDO
     WHERE ID_PESSOA = p_id_pessoa AND TIPO_CONDICAO = 'TEA';
 
+    -- alguns direitos exigem um tipo especifico de deficiencia (ex.: isencao de IOF = fisica)
+    IF v_crit.COD_TIPO_EXIGIDO IS NOT NULL THEN
+        SELECT COUNT(*) INTO v_tipo
+        FROM T_DF_LAUDO
+        WHERE ID_PESSOA = p_id_pessoa AND TIPO_CONDICAO = v_crit.COD_TIPO_EXIGIDO;
+    ELSE
+        v_tipo := 1;
+    END IF;
+
     v_fracao := FN_RENDA_PER_CAPITA_SM(p_id_pessoa);
     v_txt_f  := TO_CHAR(v_fracao, 'FM990D0000', 'NLS_NUMERIC_CHARACTERS=''.,''');
     v_txt_l  := TO_CHAR(v_crit.FRC_SM_MAX, 'FM990D0000', 'NLS_NUMERIC_CHARACTERS=''.,''');
@@ -97,6 +107,9 @@ BEGIN
     ELSIF v_crit.STA_EXIGE_PCD = 'S' AND v_pcd = 0 THEN
         p_status := 'NAO_ELEGIVEL';
         p_motivo := 'Exige laudo de deficiencia (PcD)';
+    ELSIF v_tipo = 0 THEN
+        p_status := 'NAO_ELEGIVEL';
+        p_motivo := 'Exige laudo de deficiencia do tipo ' || v_crit.COD_TIPO_EXIGIDO;
     ELSIF v_crit.FRC_SM_MAX IS NULL THEN
         p_status := 'ELEGIVEL';
         p_motivo := 'Criterios atendidos (sem limite de renda)';

@@ -66,23 +66,23 @@ END;
 /
 
 ------------------------------------------------------------
--- CATALOGO DE DIREITOS (15) - STA_VERIFICACAO = VERIFICADO nos 5 direitos conferidos em paginas oficiais em 09/11/2026; CONFIRMAR nos demais
+-- CATALOGO DE DIREITOS (15) - STA_VERIFICACAO = VERIFICADO nos 12 direitos conferidos em paginas oficiais em 09/11/2026; CONFIRMAR nos demais
 ------------------------------------------------------------
 BEGIN
     PRC_CARGA_DIREITO('BPC_IDOSO', 'BPC/LOAS - Idoso 65+', 'INSS', 'Lei 8.742/1993 art. 20', 'IDOSO', 45, 'VERIFICADO');
     PRC_CARGA_DIREITO('BPC_PCD', 'BPC/LOAS - Pessoa com Deficiencia', 'INSS', 'Lei 8.742/1993 art. 20', 'PCD', 45, 'VERIFICADO');
     PRC_CARGA_DIREITO('PASSE_LIVRE_PCD', 'Passe Livre Interestadual - PcD', 'Ministerio dos Transportes', 'Lei 8.899/1994', 'PCD', 30, 'VERIFICADO');
     PRC_CARGA_DIREITO('PASSE_IDOSO_INTERESTADUAL', 'Vagas gratuitas interestaduais - Idoso', 'ANTT / transportadora', 'Lei 10.741/2003 art. 40', 'IDOSO', 30, 'VERIFICADO');
-    PRC_CARGA_DIREITO('ISENCAO_IPI_VEICULO_PCD', 'Isencao de IPI na compra de veiculo - PcD', 'Receita Federal', 'Lei 8.989/1995', 'PCD', 60, 'CONFIRMAR');
-    PRC_CARGA_DIREITO('ISENCAO_IOF_VEICULO_PCD', 'Isencao de IOF em financiamento de veiculo - PcD', 'Receita Federal', 'Lei 8.383/1991 art. 72', 'PCD', 60, 'CONFIRMAR');
-    PRC_CARGA_DIREITO('CIPTEA', 'Carteira de Identificacao da Pessoa com TEA', 'Governo estadual ou municipal', 'Lei 13.977/2020', 'AUTISMO', 30, 'CONFIRMAR');
+    PRC_CARGA_DIREITO('ISENCAO_IPI_VEICULO_PCD', 'Isencao de IPI na compra de veiculo - PcD', 'Receita Federal', 'Lei 8.989/1995', 'PCD', 60, 'VERIFICADO');
+    PRC_CARGA_DIREITO('ISENCAO_IOF_VEICULO_PCD', 'Isencao de IOF em financiamento de veiculo - PcD', 'Receita Federal', 'Lei 8.383/1991 art. 72', 'PCD', 60, 'VERIFICADO');
+    PRC_CARGA_DIREITO('CIPTEA', 'Carteira de Identificacao da Pessoa com TEA', 'Governo estadual ou municipal', 'Lei 13.977/2020', 'AUTISMO', 30, 'VERIFICADO');
     PRC_CARGA_DIREITO('TARIFA_SOCIAL_ENERGIA', 'Tarifa Social de Energia Eletrica', 'ANEEL / distribuidora', 'Lei 12.212/2010', 'BAIXA_RENDA', 30, 'VERIFICADO');
     PRC_CARGA_DIREITO('BOLSA_FAMILIA', 'Bolsa Familia', 'MDS / Caixa', 'Lei 14.601/2023', 'BAIXA_RENDA', 30, 'CONFIRMAR');
-    PRC_CARGA_DIREITO('CADUNICO', 'Cadastro Unico (CadUnico)', 'CRAS municipal', 'Decreto 11.016/2022', 'BAIXA_RENDA', 30, 'CONFIRMAR');
+    PRC_CARGA_DIREITO('CADUNICO', 'Cadastro Unico (CadUnico)', 'CRAS municipal', 'Decreto 11.016/2022', 'BAIXA_RENDA', 30, 'VERIFICADO');
     PRC_CARGA_DIREITO('COTA_PCD_ENSINO_SUPERIOR', 'Reserva de vagas PcD - ensino superior federal', 'MEC / instituicao', 'Lei 13.409/2016', 'PCD', 30, 'CONFIRMAR');
-    PRC_CARGA_DIREITO('COTA_PCD_CONCURSO', 'Reserva de vagas PcD - concurso publico federal', 'Orgao / banca', 'Decreto 9.508/2018', 'PCD', 30, 'CONFIRMAR');
-    PRC_CARGA_DIREITO('COTA_PCD_EMPREGO', 'Reserva de vagas PcD em empresas', 'Ministerio do Trabalho', 'Lei 8.213/1991 art. 93', 'PCD', 30, 'CONFIRMAR');
-    PRC_CARGA_DIREITO('PRIORIDADE_IDOSO', 'Atendimento prioritario - Idoso 60+', 'Qualquer orgao publico', 'Lei 10.048/2000', 'IDOSO', 30, 'CONFIRMAR');
+    PRC_CARGA_DIREITO('COTA_PCD_CONCURSO', 'Reserva de vagas PcD - concurso publico federal', 'Orgao / banca', 'Decreto 9.508/2018', 'PCD', 30, 'VERIFICADO');
+    PRC_CARGA_DIREITO('COTA_PCD_EMPREGO', 'Reserva de vagas PcD em empresas', 'Ministerio do Trabalho', 'Lei 8.213/1991 art. 93', 'PCD', 30, 'VERIFICADO');
+    PRC_CARGA_DIREITO('PRIORIDADE_IDOSO', 'Atendimento prioritario - Idoso 60+', 'Qualquer orgao publico', 'Lei 10.048/2000', 'IDOSO', 30, 'VERIFICADO');
     PRC_CARGA_DIREITO('ISENCAO_IR_65MAIS', 'Parcela isenta adicional de IR - 65+', 'Receita Federal', 'Lei 7.713/1988 art. 6 XV', 'IDOSO', 30, 'CONFIRMAR');
 END;
 /
@@ -91,20 +91,20 @@ END;
 -- CRITERIOS (frc_sm_max = fracao do salario minimo per capita)
 ------------------------------------------------------------
 BEGIN
-    PRC_CARGA_CRITERIO('BPC_IDOSO', 65, NULL, 'N', 'N', 0.25, 20);
-    PRC_CARGA_CRITERIO('BPC_PCD', 0, NULL, 'S', 'N', 0.25, 20);
-    PRC_CARGA_CRITERIO('PASSE_LIVRE_PCD', 0, NULL, 'S', 'N', 1.0, 20);
-    PRC_CARGA_CRITERIO('PASSE_IDOSO_INTERESTADUAL', 60, NULL, 'N', 'N', 2.0, 0);
-    PRC_CARGA_CRITERIO('ISENCAO_IPI_VEICULO_PCD', 0, NULL, 'S', 'N', NULL, 0);
-    PRC_CARGA_CRITERIO('ISENCAO_IOF_VEICULO_PCD', 0, NULL, 'S', 'N', NULL, 0);
-    PRC_CARGA_CRITERIO('CIPTEA', 0, NULL, 'N', 'S', NULL, 0);
-    PRC_CARGA_CRITERIO('TARIFA_SOCIAL_ENERGIA', 0, NULL, 'N', 'N', 0.5, 20);
-    PRC_CARGA_CRITERIO('BOLSA_FAMILIA', 0, NULL, 'N', 'N', 0.135, 20);
-    PRC_CARGA_CRITERIO('CADUNICO', 0, NULL, 'N', 'N', 0.5, 20);
-    PRC_CARGA_CRITERIO('COTA_PCD_ENSINO_SUPERIOR', 0, NULL, 'S', 'N', NULL, 0);
-    PRC_CARGA_CRITERIO('COTA_PCD_CONCURSO', 0, NULL, 'S', 'N', NULL, 0);
-    PRC_CARGA_CRITERIO('COTA_PCD_EMPREGO', 0, NULL, 'S', 'N', NULL, 0);
-    PRC_CARGA_CRITERIO('PRIORIDADE_IDOSO', 60, NULL, 'N', 'N', NULL, 0);
-    PRC_CARGA_CRITERIO('ISENCAO_IR_65MAIS', 65, NULL, 'N', 'N', NULL, 0);
+    PRC_CARGA_CRITERIO('BPC_IDOSO', 65, NULL, 'N', 'N', NULL, 0.25, 20);
+    PRC_CARGA_CRITERIO('BPC_PCD', 0, NULL, 'S', 'N', NULL, 0.25, 20);
+    PRC_CARGA_CRITERIO('PASSE_LIVRE_PCD', 0, NULL, 'S', 'N', NULL, 1.0, 20);
+    PRC_CARGA_CRITERIO('PASSE_IDOSO_INTERESTADUAL', 60, NULL, 'N', 'N', NULL, 2.0, 0);
+    PRC_CARGA_CRITERIO('ISENCAO_IPI_VEICULO_PCD', 0, NULL, 'S', 'N', NULL, NULL, 0);
+    PRC_CARGA_CRITERIO('ISENCAO_IOF_VEICULO_PCD', 18, NULL, 'S', 'N', 'DEF_FISICA', NULL, 0);
+    PRC_CARGA_CRITERIO('CIPTEA', 0, NULL, 'N', 'S', NULL, NULL, 0);
+    PRC_CARGA_CRITERIO('TARIFA_SOCIAL_ENERGIA', 0, NULL, 'N', 'N', NULL, 0.5, 20);
+    PRC_CARGA_CRITERIO('BOLSA_FAMILIA', 0, NULL, 'N', 'N', NULL, 0.135, 20);
+    PRC_CARGA_CRITERIO('CADUNICO', 0, NULL, 'N', 'N', NULL, 0.5, 20);
+    PRC_CARGA_CRITERIO('COTA_PCD_ENSINO_SUPERIOR', 16, NULL, 'S', 'N', NULL, NULL, 0);
+    PRC_CARGA_CRITERIO('COTA_PCD_CONCURSO', 18, NULL, 'S', 'N', NULL, NULL, 0);
+    PRC_CARGA_CRITERIO('COTA_PCD_EMPREGO', 16, NULL, 'S', 'N', NULL, NULL, 0);
+    PRC_CARGA_CRITERIO('PRIORIDADE_IDOSO', 60, NULL, 'N', 'N', NULL, NULL, 0);
+    PRC_CARGA_CRITERIO('ISENCAO_IR_65MAIS', 65, NULL, 'N', 'N', NULL, NULL, 0);
 END;
 /

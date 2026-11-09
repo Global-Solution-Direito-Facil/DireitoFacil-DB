@@ -256,6 +256,7 @@ CREATE OR REPLACE PROCEDURE PRC_CARGA_CRITERIO (
     p_idade_max     IN NUMBER,
     p_exige_pcd    IN VARCHAR2,
     p_exige_tea    IN VARCHAR2,
+    p_tipo_exigido  IN VARCHAR2,
     p_frc_sm_max    IN NUMBER,
     p_pct_tolerancia IN NUMBER
 )
@@ -268,8 +269,8 @@ BEGIN
     IF v_qtd = 0 THEN
         RAISE_APPLICATION_ERROR(-20012, 'Direito nao encontrado');
     END IF;
-    INSERT INTO T_DF_CRITERIO_DIREITO (ID_DIREITO, NUM_IDADE_MIN, NUM_IDADE_MAX, STA_EXIGE_PCD, STA_EXIGE_TEA, FRC_SM_MAX, PCT_TOLERANCIA)
-    SELECT ID_DIREITO, p_idade_min, p_idade_max, UPPER(p_exige_pcd), UPPER(p_exige_tea), p_frc_sm_max, p_pct_tolerancia
+    INSERT INTO T_DF_CRITERIO_DIREITO (ID_DIREITO, NUM_IDADE_MIN, NUM_IDADE_MAX, STA_EXIGE_PCD, STA_EXIGE_TEA, COD_TIPO_EXIGIDO, FRC_SM_MAX, PCT_TOLERANCIA)
+    SELECT ID_DIREITO, p_idade_min, p_idade_max, UPPER(p_exige_pcd), UPPER(p_exige_tea), UPPER(p_tipo_exigido), p_frc_sm_max, p_pct_tolerancia
     FROM T_DF_DIREITO WHERE COD_DIREITO = UPPER(p_cod_direito);
     DBMS_OUTPUT.PUT_LINE('Criterio cadastrado');
 EXCEPTION
