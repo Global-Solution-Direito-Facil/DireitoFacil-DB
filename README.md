@@ -399,3 +399,4 @@ Ferramenta: **Claude (Anthropic)**, usada como apoio para gerar o rascunho dos s
 | RM564093 | Gabriel Neris Losano | 2TDSPG |
 | RM565554 | Alexander Dennis Isidro Mamani | 2TDSPG |
 | RM563748 | Kelson Zhang | 2TDSPG |
+| RM561378 | Pietro Paranhos Wilhelm | 2TDSPG |
