@@ -66,17 +66,17 @@ END;
 /
 
 ------------------------------------------------------------
--- CATALOGO DE DIREITOS (15) - STA_VERIFICACAO = CONFIRMAR ate o Compliance revisar
+-- CATALOGO DE DIREITOS (15) - STA_VERIFICACAO = VERIFICADO nos 5 direitos conferidos em paginas oficiais em 09/11/2026; CONFIRMAR nos demais
 ------------------------------------------------------------
 BEGIN
-    PRC_CARGA_DIREITO('BPC_IDOSO', 'BPC/LOAS - Idoso 65+', 'INSS', 'Lei 8.742/1993 art. 20', 'IDOSO', 45, 'CONFIRMAR');
-    PRC_CARGA_DIREITO('BPC_PCD', 'BPC/LOAS - Pessoa com Deficiencia', 'INSS', 'Lei 8.742/1993 art. 20', 'PCD', 45, 'CONFIRMAR');
-    PRC_CARGA_DIREITO('PASSE_LIVRE_PCD', 'Passe Livre Interestadual - PcD', 'Ministerio dos Transportes', 'Lei 8.899/1994', 'PCD', 30, 'CONFIRMAR');
-    PRC_CARGA_DIREITO('PASSE_IDOSO_INTERESTADUAL', 'Vagas gratuitas interestaduais - Idoso', 'ANTT / transportadora', 'Lei 10.741/2003 art. 40', 'IDOSO', 30, 'CONFIRMAR');
+    PRC_CARGA_DIREITO('BPC_IDOSO', 'BPC/LOAS - Idoso 65+', 'INSS', 'Lei 8.742/1993 art. 20', 'IDOSO', 45, 'VERIFICADO');
+    PRC_CARGA_DIREITO('BPC_PCD', 'BPC/LOAS - Pessoa com Deficiencia', 'INSS', 'Lei 8.742/1993 art. 20', 'PCD', 45, 'VERIFICADO');
+    PRC_CARGA_DIREITO('PASSE_LIVRE_PCD', 'Passe Livre Interestadual - PcD', 'Ministerio dos Transportes', 'Lei 8.899/1994', 'PCD', 30, 'VERIFICADO');
+    PRC_CARGA_DIREITO('PASSE_IDOSO_INTERESTADUAL', 'Vagas gratuitas interestaduais - Idoso', 'ANTT / transportadora', 'Lei 10.741/2003 art. 40', 'IDOSO', 30, 'VERIFICADO');
     PRC_CARGA_DIREITO('ISENCAO_IPI_VEICULO_PCD', 'Isencao de IPI na compra de veiculo - PcD', 'Receita Federal', 'Lei 8.989/1995', 'PCD', 60, 'CONFIRMAR');
     PRC_CARGA_DIREITO('ISENCAO_IOF_VEICULO_PCD', 'Isencao de IOF em financiamento de veiculo - PcD', 'Receita Federal', 'Lei 8.383/1991 art. 72', 'PCD', 60, 'CONFIRMAR');
     PRC_CARGA_DIREITO('CIPTEA', 'Carteira de Identificacao da Pessoa com TEA', 'Governo estadual ou municipal', 'Lei 13.977/2020', 'AUTISMO', 30, 'CONFIRMAR');
-    PRC_CARGA_DIREITO('TARIFA_SOCIAL_ENERGIA', 'Tarifa Social de Energia Eletrica', 'ANEEL / distribuidora', 'Lei 12.212/2010', 'BAIXA_RENDA', 30, 'CONFIRMAR');
+    PRC_CARGA_DIREITO('TARIFA_SOCIAL_ENERGIA', 'Tarifa Social de Energia Eletrica', 'ANEEL / distribuidora', 'Lei 12.212/2010', 'BAIXA_RENDA', 30, 'VERIFICADO');
     PRC_CARGA_DIREITO('BOLSA_FAMILIA', 'Bolsa Familia', 'MDS / Caixa', 'Lei 14.601/2023', 'BAIXA_RENDA', 30, 'CONFIRMAR');
     PRC_CARGA_DIREITO('CADUNICO', 'Cadastro Unico (CadUnico)', 'CRAS municipal', 'Decreto 11.016/2022', 'BAIXA_RENDA', 30, 'CONFIRMAR');
     PRC_CARGA_DIREITO('COTA_PCD_ENSINO_SUPERIOR', 'Reserva de vagas PcD - ensino superior federal', 'MEC / instituicao', 'Lei 13.409/2016', 'PCD', 30, 'CONFIRMAR');
