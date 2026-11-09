@@ -41,7 +41,7 @@ Base legal usada na regra de TEA: Lei 12.764/2012, art. 1º, §2º — a pessoa 
 | Item | O que é |
 |---|---|
 | `00_DROP.sql` a `08_EXPORTA_JSON.sql` | Scripts Oracle, na ordem de execução |
-| `mongo/` | Scripts MongoDB: carga de 2 collections (32 documentos) e as 3 consultas |
+| `mongo/` | Scripts MongoDB: carga de 2 collections (28 documentos) e as 3 consultas |
 | `flyway/` | O mesmo banco em migrations `V1` a `V5`, sem comandos de SQL*Plus, para a API Java |
 | `evidencias/` | Prints da execução no Oracle SQL Developer |
 | `documentacaoDB.pdf` | Documentação com os requisitos atendidos e todas as evidências |
@@ -50,7 +50,7 @@ Base legal usada na regra de TEA: Lei 12.764/2012, art. 1º, §2º — a pessoa 
 
 | # | Arquivo | O que faz |
 |---|---|---|
-| 1 | `mongo/01_setup_e_carga.js` | Seleciona/cria o database `citizentech`, cria 2 collections (com validação e índices), insere **32 documentos** |
+| 1 | `mongo/01_setup_e_carga.js` | Seleciona/cria o database `citizentech`, cria 2 collections (com validação e índices), insere **28 documentos** |
 | 2 | `mongo/02_consultas.js` | 2 `find` + 1 `aggregate`, equivalentes aos relatórios do Oracle |
 
 ```bash
@@ -85,7 +85,7 @@ T_DF_SALARIO_MINIMO  (parâmetro de renda)      T_DF_LOG_ERRO  (erros das proced
 | `T_DF_ORIENTACAO` | Passo a passo em linguagem simples gerado pela IA (RAG) e gravado pelo Java, com a **fonte citada** (lei ou cartilha). 1:1 com o caso; o app mobile lê pela API |
 | `T_DF_LAUDO` | Dados estruturados do laudo (ligado ao documento): CID, condição, `TIPO_CONDICAO` (`TEA`, `DEF_FISICA`, …, `OUTRA`) |
 | `T_DF_DIREITO` | Catálogo de 15 direitos federais (órgão, base legal, prazo, `STA_VERIFICACAO`) |
-| `T_DF_CRITERIO_DIREITO` | **A regra em tabela**: idade mín/máx, exige PcD, exige TEA, fração do SM per capita, tolerância |
+| `T_DF_CRITERIO_DIREITO` | **A regra em tabela**: idade mín/máx, exige PcD, exige TEA, tipo de deficiência exigido (ex.: só física), fração do SM per capita, tolerância |
 | `T_DF_CASO` | Pedido de um direito: status, resultado da avaliação, motivo, prazo. `UNIQUE(pessoa, direito)` |
 | `T_DF_AUDITORIA_CASO` | Trilha: usuário, data, operação, status/valores antigo e novo |
 | `T_DF_SALARIO_MINIMO` | Valor do salário mínimo por ano |
@@ -98,10 +98,11 @@ Avalia na ordem e para na primeira falha:
 1. Idade fora da faixa → `NAO_ELEGIVEL`
 2. Direito exige TEA e não há laudo de TEA → `NAO_ELEGIVEL`
 3. Direito exige PcD e não há laudo de deficiência (TEA conta) → `NAO_ELEGIVEL`
-4. Sem limite de renda → `ELEGIVEL`
-5. Renda per capita (em SM) ≤ limite → `ELEGIVEL`
-6. Até o limite + tolerância (padrão 20%) → `POSSIVEL` ("confirmar renda no CadÚnico")
-7. Acima → `NAO_ELEGIVEL`
+4. Direito exige um tipo específico de deficiência (ex.: a isenção de IOF exige deficiência física) e não há laudo desse tipo → `NAO_ELEGIVEL`
+5. Sem limite de renda → `ELEGIVEL`
+6. Renda per capita (em SM) ≤ limite → `ELEGIVEL`
+7. Até o limite + tolerância (padrão 20%) → `POSSIVEL` ("confirmar renda no CadÚnico")
+8. Acima → `NAO_ELEGIVEL`
 
 `PRC_ABRIR_CASOS` percorre o catálogo com cursor e abre um caso para cada direito `ELEGIVEL` ou `POSSIVEL` (não duplica).
 
@@ -140,7 +141,7 @@ Não há integração automática: a transição é demonstrada por scripts. O `
 - **Embutido — direito dentro do caso:** o caso sempre é lido junto com o nome e a base legal do direito, e o direito tem poucas alterações. Guardar uma cópia dá uma tela de caso com 1 leitura, sem join. É um snapshot do que valia na abertura do caso.
 - **Embutido — histórico dentro do caso:** são poucas linhas (1 a 4) que só fazem sentido dentro do caso. No Oracle isso é a tabela de auditoria.
 - **Embutido — pessoa e documento dentro do laudo:** o laudo é um documento extraído num momento; a idade, a renda e os dados do arquivo recebido são o retrato daquele momento, e o documento tem relação 1:1 com o laudo.
-- **Referência — pessoa no caso:** uma pessoa tem muitos casos (até 10 na demo) e seus dados mudam. Copiar tudo em cada caso geraria dado duplicado e desatualizado, então o caso guarda só `idPessoa` + `nome` (para exibir listas).
+- **Referência — pessoa no caso:** uma pessoa tem muitos casos (até 6 na demo) e seus dados mudam. Copiar tudo em cada caso geraria dado duplicado e desatualizado, então o caso guarda só `idPessoa` + `nome` (para exibir listas).
 - **Fica no Oracle:** critérios e decisão. A regra precisa ser única, transacional e auditável.
 
 ---
@@ -156,35 +157,31 @@ Com os dados da carga, os dois bancos devem devolver exatamente isto.
 | 1 | BPC_PCD | DOCUMENTOS_PENDENTES |
 | 2 | PASSE_LIVRE_PCD | ABERTO |
 | 3 | ISENCAO_IPI_VEICULO_PCD | ABERTO |
-| 4 | ISENCAO_IOF_VEICULO_PCD | ABERTO |
-| 5 | CIPTEA | CONCEDIDO |
-| 6 | TARIFA_SOCIAL_ENERGIA | ABERTO |
-| 7 | CADUNICO | ABERTO |
-| 8 | COTA_PCD_ENSINO_SUPERIOR | ABERTO |
-| 9 | COTA_PCD_CONCURSO | ABERTO |
-| 10 | COTA_PCD_EMPREGO | ABERTO |
+| 4 | CIPTEA | CONCEDIDO |
+| 5 | TARIFA_SOCIAL_ENERGIA | ABERTO |
+| 6 | CADUNICO | ABERTO |
 
 ### Relatório 2 — casos em andamento com prazo até 05/12/2026 (`find` × `SELECT … WHERE`)
 
-**17 linhas**, ordenadas por prazo e id: casos 2, 6, 7, 8, 9, 10 (Lucas), 13, 14, 15 (Carlos), 17, 19, 20, 21 (Helena), 23, 24, 26, 27 (Rita), todos com prazo 2026-12-05 e status `ABERTO`. Casos com status `PROTOCOLADO`, `CONCEDIDO` ou `NEGADO` não entram, e os de 45 dias (BPC) vencem só em 20/12.
+**14 linhas**, ordenadas por prazo e id: casos 2, 5, 6 (Lucas), 9, 10, 11 (Carlos), 13, 15, 16, 17 (Helena), 19, 20, 22, 23 (Rita), todos com prazo 2026-12-05 e status `ABERTO`. Casos com status `PROTOCOLADO`, `CONCEDIDO` ou `NEGADO` não entram, e os de 45 dias (BPC) vencem só em 20/12.
 
 ### Relatório 3 — panorama por pessoa (`aggregate` × `GROUP BY`)
 
 | Pessoa | Total | Elegíveis | Possíveis | Concedidos |
 |---|---|---|---|---|
-| Lucas Almeida | 10 | 10 | 0 | 1 |
 | Helena Souza | 6 | 6 | 0 | 1 |
+| Lucas Almeida | 6 | 6 | 0 | 1 |
 | Rita Barbosa | 6 | 5 | 1 | 0 |
 | Carlos Menezes | 5 | 5 | 0 | 0 |
 
-Totais: **27 casos**, **5 laudos** e **5 documentos** (32 documentos no Mongo, já que o documento fica embutido no laudo). Marcos Teixeira não aparece: não tem nenhum direito elegível (teste negativo).
+Totais: **23 casos**, **5 laudos** e **5 documentos** (28 documentos no Mongo, já que o documento fica embutido no laudo). Marcos Teixeira não aparece: não tem nenhum direito elegível (teste negativo).
 
 ### Personas e casos de teste
 
 | Pessoa | Per capita (SM) | Resultado |
 |---|---|---|
-| Lucas, 7 anos, autismo, baixa renda | 0,1851 | 10 direitos `ELEGIVEL`; `BOLSA_FAMILIA` fica `NAO_ELEGIVEL` (acima do limite + tolerância) |
-| Carlos, cadeirante, renda média | 2,0049 | 5 direitos sem limite de renda; `BPC_PCD` e `PASSE_LIVRE_PCD` `NAO_ELEGIVEL` |
+| Lucas, 7 anos, autismo, baixa renda | 0,1851 | 6 direitos `ELEGIVEL` (BPC PcD, passe livre, IPI, CIPTEA, tarifa social e CadÚnico); `BOLSA_FAMILIA` fica `NAO_ELEGIVEL` (acima do limite + tolerância); IOF e as cotas de ensino superior, concurso e emprego ficam `NAO_ELEGIVEL` (IOF exige deficiência física e CNH; cotas exigem idade mínima) |
+| Carlos, cadeirante, renda média | 2,0049 | 5 direitos sem limite de renda (IPI, IOF e as 3 cotas); `BPC_PCD` e `PASSE_LIVRE_PCD` `NAO_ELEGIVEL` |
 | Helena, 68 anos, baixa renda | 0,2313 | 6 direitos de idoso/baixa renda `ELEGIVEL`; laudo `OUTRA` não abre PcD |
 | Marcos, 35 anos, sem deficiência | 0,9254 | nenhum direito (teste negativo) |
 | Rita, 66 anos, renda no limite | 0,2795 | `BPC_IDOSO` = `POSSIVEL` (dentro da tolerância de 20%); demais `ELEGIVEL` |
@@ -211,8 +208,8 @@ Totais: **27 casos**, **5 laudos** e **5 documentos** (32 documentos no Mongo, j
 | `03_CARGA` | Tabela final com USUARIO 6, PESSOA 5, DOCUMENTO 5, LAUDO 5, DIREITO 15, CRITERIO_DIREITO 15 e **LOG_ERRO 0** |
 | `04_BLOCOS_PLSQL` | 5 pessoas com faixa etária e renda; 5 laudos com "Total PcD: 2 (sendo TEA: 1) \| Sem deficiencia: 3" |
 | `05` | Matriz de elegibilidade (45 linhas); `POSSIVEL - Renda per capita 0.2795 SM proxima do limite de 0.2500 SM...`; `NAO_ELEGIVEL - Exige laudo de deficiencia (PcD)`; `Erro tratado: ORA-20023`; `Erro tratado: ORA-20032`; `Erro: Documento ja registrado (id externo ou chave de idempotencia repetidos)`; `DOCUMENTOS_COM_A_CHAVE = 1` |
-| `06` | `Orientacao registrada para o caso 1` (2 vezes) e `Erro tratado: ORA-20041`; `Helena x BPC_IDOSO: ELEGIVEL`; `Pessoa 1: 0 caso(s) aberto(s)`; relatório com `TOTAL GERAL: 27`; o JSON do caso 1; `Erro tratado: ORA-20033`; 4 linhas de auditoria do caso 1; `Rollback complete.` |
-| `07` | 10, 17 e 4 linhas e totais 27 e 5 |
+| `06` | `Orientacao registrada para o caso 1` (2 vezes) e `Erro tratado: ORA-20041`; `Helena x BPC_IDOSO: ELEGIVEL`; `Pessoa 1: 0 caso(s) aberto(s)`; relatório com `TOTAL GERAL: 23`; o JSON do caso 1; `Erro tratado: ORA-20033`; 4 linhas de auditoria do caso 1; `Rollback complete.` |
+| `07` | 6, 14 e 4 linhas e totais 23 e 5 |
 
 Se algum script falhar, confira a mensagem na aba **Script Output**. Para refazer tudo do zero, rode `00_DROP.sql` e depois os demais em ordem (rodar `01` a `03` duas vezes sem o `00` gera erro de objeto já existente e de chave duplicada).
 
@@ -237,11 +234,11 @@ Os prints abaixo foram tirados após rodar os scripts na ordem. O PDF `documenta
 
 ![T_DF_CRITERIO_DIREITO](evidencias/06_t_df_criterio_direito.png)
 
-`T_DF_CASO` (27 casos abertos pela procedure de avaliação):
+`T_DF_CASO` (23 casos abertos pela procedure de avaliação):
 
 ![T_DF_CASO](evidencias/07_t_df_caso.png)
 
-`T_DF_AUDITORIA_CASO` (38 linhas gravadas pelo gatilho):
+`T_DF_AUDITORIA_CASO` (34 linhas gravadas pelo gatilho):
 
 ![T_DF_AUDITORIA_CASO](evidencias/08_t_df_auditoria_caso.png)
 
@@ -282,7 +279,7 @@ Gatilho de validação recusando `PROTOCOLADO` → `ABERTO` (`ORA-20033`):
 
 ![Gatilho de validação](evidencias/17_gatilho_validacao.png)
 
-Trilha de auditoria do caso 1 (o id 42 aparece porque colunas identity não voltam atrás no `ROLLBACK`):
+Trilha de auditoria do caso 1 (o id 36 aparece porque colunas identity não voltam atrás no `ROLLBACK`):
 
 ![Trilha de auditoria](evidencias/18_gatilho_auditoria_trilha.png)
 
@@ -292,15 +289,15 @@ Banco intacto após o `ROLLBACK` do teste:
 
 ### 6.3 Evidências do MongoDB (MongoDB Compass, `_MONGOSH`)
 
-Carga (`mongo/01_setup_e_carga.js`): 5 laudos e 27 casos, 32 documentos no total.
+Carga (`mongo/01_setup_e_carga.js`): 5 laudos e 23 casos, 28 documentos no total.
 
-![Carga do MongoDB](evidencias/20_mongo_carga_32_documentos.png)
+![Carga do MongoDB](evidencias/20_mongo_carga_28_documentos.png)
 
-Relatório 1 (`find`): os 10 direitos `ELEGIVEL` de Lucas Almeida, igual ao relatório 1 do Oracle.
+Relatório 1 (`find`): os 6 direitos `ELEGIVEL` de Lucas Almeida, igual ao relatório 1 do Oracle.
 
 ![Relatório 1 no MongoDB](evidencias/21_mongo_relatorio1_elegiveis_lucas.png)
 
-Relatório 2 (`find`): 17 casos em andamento com prazo até 05/12/2026, igual ao relatório 2 do Oracle.
+Relatório 2 (`find`): 14 casos em andamento com prazo até 05/12/2026, igual ao relatório 2 do Oracle.
 
 ![Relatório 2 no MongoDB](evidencias/22_mongo_relatorio2_prazos.png)
 
@@ -308,7 +305,7 @@ Relatório 3 (`aggregate`) e totais, idênticos ao relatório 3 do Oracle:
 
 ![Relatório 3 e totais no MongoDB](evidencias/23_mongo_relatorio3_totais.png)
 
-Database `citizentech` com as collections `casos` (27 documentos) e `laudos` (5):
+Database `citizentech` com as collections `casos` (23 documentos) e `laudos` (5):
 
 ![Collections no Compass](evidencias/24_mongo_colecoes_compass.png)
 
@@ -371,21 +368,28 @@ Nesses prints os relatórios 1 e 2 foram impressos com `print(JSON.stringify(d))
 ## 8. Status e pendências
 
 - **Oracle:** os scripts `00` a `08` foram executados na ordem no Oracle SQL Developer, sem erros de compilação, e os resultados batem com as seções 5 e 6.1 (evidências na seção 6.2). Os mesmos scripts e as migrations do `flyway/` também foram validados do zero em Oracle Free (23ai) via SQL*Plus; nesse cliente use `SET SQLBLANKLINES ON` (o SQL Developer não precisa).
-- **MongoDB:** os scripts `mongo/01_setup_e_carga.js` e `mongo/02_consultas.js` foram executados no MongoDB (Compass, `_MONGOSH`); a carga criou 2 collections com 32 documentos e os resultados dos relatórios batem com os do Oracle (seção 5). O Mongo guarda as datas em UTC (`2026-11-05T00:00:00Z`) e o `DATE` do Oracle não tem fuso, o que não altera nenhum resultado.
-- **Catálogo de direitos:** os valores abaixo foram conferidos em 09/11/2026 em páginas oficiais (gov.br e planalto.gov.br). Os 5 direitos cujo limite foi conferido estão com `STA_VERIFICACAO = 'VERIFICADO'`; os demais seguem `CONFIRMAR` até a revisão do Compliance.
+- **MongoDB:** os scripts `mongo/01_setup_e_carga.js` e `mongo/02_consultas.js` foram executados no MongoDB (Compass, `_MONGOSH`); a carga criou 2 collections com 28 documentos e os resultados dos relatórios batem com os do Oracle (seção 5). O Mongo guarda as datas em UTC (`2026-11-05T00:00:00Z`) e o `DATE` do Oracle não tem fuso, o que não altera nenhum resultado.
+- **Catálogo de direitos:** os valores e as regras abaixo foram conferidos em 09/11/2026 em páginas oficiais (gov.br e planalto.gov.br). Os 12 direitos conferidos estão com `STA_VERIFICACAO = 'VERIFICADO'`; os 3 restantes seguem `CONFIRMAR`.
 
-| Item no banco | Valor | Status | Fonte oficial |
+| Item no banco | Regra | Status | Fonte oficial |
 |---|---|---|---|
 | Salário mínimo 2026 | R$ 1.621,00 | Conferido | [Decreto 12.797/2025 (Planalto)](https://www.planalto.gov.br/ccivil_03/_ato2023-2026/2025/decreto/d12797.htm) |
 | `BPC_IDOSO` e `BPC_PCD` | até 1/4 do SM per capita (R$ 405,25) | `VERIFICADO` | [INSS: regras do BPC](https://www.gov.br/inss/pt-br/noticias/nao-caia-em-informacao-falsa-sobre-regras-do-bpc) |
 | `TARIFA_SOCIAL_ENERGIA` | até 1/2 SM per capita (CadÚnico) | `VERIFICADO` | [Lei 12.212/2010 (Planalto)](http://www.planalto.gov.br/ccivil_03/_ato2007-2010/2010/lei/l12212.htm) e [ANEEL](https://www.gov.br/aneel/pt-br/assuntos/noticias/2025/tarifa-social-movimenta-mais-de-6-bilhoes-em-descontos-em-2024-para-familias-carentes) |
-| `PASSE_LIVRE_PCD` | até 1 SM per capita | `VERIFICADO` | [gov.br: Passe Livre Interestadual](https://www.gov.br/pt-br/servicos/obter-passe-livre-interestadual-digital) e [Ministério dos Transportes](https://www.gov.br/transportes/pt-br/servicos/servicos/passe-livre) |
-| `PASSE_IDOSO_INTERESTADUAL` | até 2 SM (60+), art. 40, I | `VERIFICADO` | [Estatuto da Pessoa Idosa (PDF do MDS)](https://www.mds.gov.br/webarquivos/publicacao/assistencia_social/Normativas/Estatuto_Idoso.pdf) |
+| `CADUNICO` | até 1/2 SM per capita (art. 5º, II) | `VERIFICADO` | [Decreto 11.016/2022 (Planalto)](https://www.planalto.gov.br/ccivil_03/_ato2019-2022/2022/decreto/d11016.htm) |
+| `PASSE_LIVRE_PCD` | PcD com renda até 1 SM per capita | `VERIFICADO` | [gov.br: Passe Livre Interestadual](https://www.gov.br/pt-br/servicos/obter-passe-livre-interestadual-digital) e [Ministério dos Transportes](https://www.gov.br/transportes/pt-br/servicos/servicos/passe-livre) |
+| `PASSE_IDOSO_INTERESTADUAL` | 60+ com renda até 2 SM (art. 40, I) | `VERIFICADO` | [Estatuto da Pessoa Idosa (PDF do MDS)](https://www.mds.gov.br/webarquivos/publicacao/assistencia_social/Normativas/Estatuto_Idoso.pdf) |
+| `ISENCAO_IPI_VEICULO_PCD` | PcD (física, visual, auditiva, mental grave) ou TEA | `VERIFICADO` | [Lei 8.989/1995 (Planalto)](https://www.planalto.gov.br/ccivil_03/leis/l8989compilado.htm) e [Receita Federal](https://www.gov.br/receitafederal/pt-br/acesso-a-informacao/perguntas-frequentes/isencao-para-compra-de-carro/isencao-para-compra-de-carro) |
+| `ISENCAO_IOF_VEICULO_PCD` | só deficiência física, condutor com CNH (18+) | `VERIFICADO` | [Lei 8.383/1991, art. 72 (Planalto)](https://www.planalto.gov.br/ccivil_03/leis/l8383.htm) e [Receita Federal](https://www.gov.br/receitafederal/pt-br/acesso-a-informacao/perguntas-frequentes/isencao-para-compra-de-carro/isencao-para-compra-de-carro) |
+| `CIPTEA` | laudo de TEA | `VERIFICADO` | [Lei 13.977/2020 (Planalto)](https://www.planalto.gov.br/ccivil_03/_ato2019-2022/2020/lei/l13977.htm) |
+| `PRIORIDADE_IDOSO` | 60 anos ou mais | `VERIFICADO` | [Lei 10.048/2000 (Planalto)](https://www.planalto.gov.br/ccivil_03/leis/l10048.htm) |
+| `COTA_PCD_CONCURSO` | PcD, mínimo 5% das vagas; idade mínima 18 | `VERIFICADO` | [Decreto 9.508/2018 (Planalto)](https://planalto.gov.br/CCiViL_03/_Ato2015-2018/2018/Decreto/D9508.htm) e [MGI](https://www.gov.br/gestao/pt-br/assuntos/acoes-afirmativas-na-gestao-1/reserva-de-vagas-para-pessoas-com-deficiencia-em-concursos-publicos) |
+| `COTA_PCD_EMPREGO` | empresas com 100+ empregados reservam 2% a 5%; idade mínima 16 | `VERIFICADO` | [Lei 8.213/1991, art. 93 (Planalto)](https://www.planalto.gov.br/ccivil_03/leis/l8213cons.htm) |
+| `COTA_PCD_ENSINO_SUPERIOR` | PcD; idade mínima 16 (escolha do projeto) | `CONFIRMAR` | [Lei 13.409/2016 (Planalto)](https://www.planalto.gov.br/ccivil_03/_ato2015-2018/2016/lei/l13409.htm) |
 | `BOLSA_FAMILIA` | até R$ 218 per capita (guardado como 0,135 SM) | `CONFIRMAR` | [MDS: conheça as regras](https://www.gov.br/mds/pt-br/acoes-e-programas/bolsa-familia/paginas/conheca-as-regras) |
 | `ISENCAO_IR_65MAIS` | parcela isenta de R$ 1.903,98/mês sobre aposentadoria e pensão | `CONFIRMAR` | [Receita Federal](https://www.gov.br/receitafederal/pt-br/assuntos/meu-imposto-de-renda/preenchimento/isencao65) |
-| `CADUNICO`, `ISENCAO_IPI_VEICULO_PCD`, `ISENCAO_IOF_VEICULO_PCD`, `CIPTEA`, `COTA_PCD_*`, `PRIORIDADE_IDOSO` | critérios de PcD, TEA ou idade; `CADUNICO` até 1/2 SM | `CONFIRMAR` | base legal ainda não revisada |
 
-Ressalvas: (1) o `POSSIVEL` (tolerância de 20% sobre o limite) é uma escolha do projeto para sinalizar renda próxima do limite; o BPC pode ser concedido acima de 1/4 SM com prova de vulnerabilidade, mas isso exige análise caso a caso; (2) o valor de R$ 218 do Bolsa Família aparece nas páginas do MDS, mas não foi confirmado que é o de 2026, e ele é um valor fixo em reais, aproximado aqui como fração do SM; (3) a parcela isenta do IR 65+ aparece na Receita com R$ 1.903,98, mas não foi confirmado se a Lei 15.270/2025 alterou o art. 6º, XV, da Lei 7.713/1988; (4) a regra do Passe Livre PcD também admite quem recebe o BPC, e o banco usa só o critério de renda.
+Ressalvas: (1) o `POSSIVEL` (tolerância de 20% sobre o limite) é uma escolha do projeto para sinalizar renda próxima do limite; o BPC pode ser concedido acima de 1/4 SM com prova de vulnerabilidade, mas isso exige análise caso a caso; (2) a isenção de IOF vale só para deficiência física e exige CNH; por isso o banco usa o tipo de deficiência exigido (`COD_TIPO_EXIGIDO`) e idade mínima 18, e Lucas (7 anos, TEA) não é elegível; (3) as idades mínimas das cotas (18 para concurso, 16 para emprego e ensino superior) são regras práticas do projeto, e a cota de ensino superior também depende de o candidato ter cursado o ensino médio em escola pública, o que o banco não modela; (4) segundo a Receita, o benefício de IPI para PcD está garantido até 31/12/2026, e a isenção exige laudo assinado por médico (e, no caso de autismo, também por psicólogo); (5) o valor de R$ 218 do Bolsa Família aparece nas páginas do MDS, mas não foi confirmado que é o de 2026; (6) não foi confirmado se a Lei 15.270/2025 alterou o art. 6º, XV, da Lei 7.713/1988 (IR 65+); (7) as normas mudam com frequência; reconfira antes de usar em produção.
 - Dados, pessoas e laudos são **fictícios**.
 
 ## 9. Uso de IA generativa (declaração exigida pelo PDF da Global Solution)
