@@ -27,12 +27,12 @@ Base legal usada na regra de TEA: Lei 12.764/2012, art. 1º, §2º — a pessoa 
 | # | Arquivo | O que faz | Requisito do PDF |
 |---|---|---|---|
 | 0 | `00_DROP.sql` | Reset completo (opcional, seguro de rodar duas vezes) | — |
-| 1 | `01_DDL.sql` | 11 tabelas em 3FN, PK/FK/UK/CHECK | 2+ tabelas relacionadas |
-| 2 | `02_PROCEDURES.sql` | 7 procedures de carga (`PRC_CARGA_*`) com log de erro | — |
-| 3 | `03_CARGA.sql` | Dados de teste: 6 usuários, 5 pessoas, 5 documentos, 5 laudos, 20 direitos, 20 critérios | dados de teste |
+| 1 | `01_DDL.sql` | 14 tabelas em 3FN, PK/FK/UK/CHECK | 2+ tabelas relacionadas |
+| 2 | `02_PROCEDURES.sql` | 8 procedures de carga (`PRC_CARGA_*`) com log de erro | — |
+| 3 | `03_CARGA.sql` | Dados de teste: 6 usuários, 5 pessoas, 5 documentos, 5 laudos, 20 direitos, 20 critérios e os 41 itens do elenco do Farmácia Popular | dados de teste |
 | 4 | `04_BLOCOS_PLSQL.sql` | **2 blocos anônimos**: cursor + `FOR LOOP` + `IF/ELSIF`; `WHILE` + `CASE` | 2 blocos PL/SQL |
 | 5 | `05_FUNCOES_PROCEDURES_GATILHOS.sql` | **2 funções + 3 procedures + 2 gatilhos**, abre os casos e roda os testes | funções, procedures, gatilhos |
-| 6 | `06_PACKAGES.sql` | **3 pacotes** (spec + body) + gatilho de auditoria delegando ao pacote + testes | 2+ pacotes com testes |
+| 6 | `06_PACKAGES.sql` | **4 pacotes** (spec + body) + gatilho de auditoria delegando ao pacote + testes | 2+ pacotes com testes |
 | 7 | `07_RELATORIOS_ORACLE.sql` | 3 relatórios equivalentes às consultas do MongoDB | comparação |
 | 8 | `08_EXPORTA_JSON.sql` | (opcional) exporta os casos como JSON montado à mão | transição |
 
@@ -90,6 +90,9 @@ T_DF_SALARIO_MINIMO  (parâmetro de renda)      T_DF_LOG_ERRO  (erros das proced
 | `T_DF_AUDITORIA_CASO` | Trilha: usuário, data, operação, status/valores antigo e novo |
 | `T_DF_SALARIO_MINIMO` | Valor do salário mínimo por ano |
 | `T_DF_LOG_ERRO` | Toda procedure grava aqui quando cai em `EXCEPTION` |
+| `T_DF_MEDICAMENTO_FP` | **Elenco oficial do Farmácia Popular** (39 medicamentos + 2 insumos, por indicação), com fonte e data do elenco |
+| `T_DF_RECEITA` | Receita enviada pela pessoa (foto no .NET; aqui fica o registro, opcionalmente ligado a `T_DF_DOCUMENTO`) |
+| `T_DF_RECEITA_ITEM` | Cada remédio **conferido pela pessoa**: o que a IA leu, o que foi confirmado, se houve correção, o resultado (`GRATUITO`, `DOSAGEM_DIVERGENTE` ou `NAO_ENCONTRADO`) e a orientação |
 
 ### Regra de elegibilidade (`FN_AVALIAR_ELEGIBILIDADE` → `PRC_AVALIAR_DIREITO`)
 
@@ -119,9 +122,20 @@ Avalia na ordem e para na primeira falha:
 |---|---|
 | `PKG_ELEGIBILIDADE` | `FN_RENDA_PER_CAPITA_SM`, `PRC_AVALIAR_DIREITO`, `FN_AVALIAR_ELEGIBILIDADE`, `PRC_ABRIR_CASOS` |
 | `PKG_CASOS` | `PRC_ATUALIZAR_STATUS_CASO`, `PRC_REGISTRAR_ORIENTACAO`, `FN_CASO_TO_JSON`, `PRC_EXPORTA_CASOS_JSON`, `PRC_REL_CASOS_POR_STATUS` |
+| `PKG_FARMACIA_POPULAR` | `FN_CONSULTAR_ITEM`, `PRC_REGISTRAR_RECEITA`, `PRC_ADICIONAR_ITEM`, `PRC_REL_RECEITA` (consulta de remédios no elenco; não abre casos) |
 | `PKG_AUDITORIA` | `REGISTRAR_AUDITORIA_CASO` — o Oracle não aceita gatilho dentro de pacote, então o gatilho virou uma casca fina que delega ao pacote |
 
 As funções/procedures do `05` (avulsas) são movidas para os pacotes no `06` e dropadas, igual ao padrão da entrega anterior.
+
+### Farmácia Popular (funcionalidade separada dos direitos)
+
+Não passa pela regra de elegibilidade e **não cria casos**, então os relatórios e os números dos casos não mudam. O fluxo é: a pessoa tira a foto da receita, a IA (Java) identifica remédio, princípio ativo e dosagem, **a pessoa confere na tela** e só então o Java grava cada item com `PKG_FARMACIA_POPULAR.PRC_ADICIONAR_ITEM`. **Quem decide o que é gratuito é a tabela `T_DF_MEDICAMENTO_FP`, não a IA.**
+
+- A consulta ignora acento e maiúsculas e aceita o princípio ativo contido no nome do elenco (`metformina` acha `cloridrato de metformina`). A concentração precisa ser igual (`500 mg` = `500mg`).
+- `GRATUITO`: princípio e dosagem no elenco. `DOSAGEM_DIVERGENTE`: o princípio está no elenco, a dosagem não. `NAO_ENCONTRADO`: não consta.
+- O banco **nunca sugere trocar de remédio**: a orientação só informa o resultado e manda confirmar na farmácia credenciada. Para retirar: receita válida e documento oficial com foto e CPF, em farmácia com o selo "Aqui tem Farmácia Popular".
+- Fraldas geriátricas e absorventes ficam no elenco (`TIPO_ITEM = 'INSUMO'`), mas dependem de laudo ou de autorização própria e não são consultados por receita.
+- A tabela foi carregada do PDF oficial "Elenco de Medicamentos e Insumos PFPB", atualizado em 31/08/2026 ([gov.br/saude](https://www.gov.br/saude/pt-br/composicao/sectics/farmacia-popular)). Se o elenco mudar, basta recarregar `T_DF_MEDICAMENTO_FP`; a coluna `DT_ELENCO` guarda a data da lista usada.
 
 ---
 
@@ -208,10 +222,10 @@ Totais: **31 casos**, **5 laudos** e **5 documentos** (36 documentos no Mongo, j
 
 | Arquivo | O que deve aparecer |
 |---|---|
-| `03_CARGA` | Tabela final com USUARIO 6, PESSOA 5, DOCUMENTO 5, LAUDO 5, DIREITO 20, CRITERIO_DIREITO 20 e **LOG_ERRO 0** |
+| `03_CARGA` | Tabela final com USUARIO 6, PESSOA 5, DOCUMENTO 5, LAUDO 5, DIREITO 20, CRITERIO_DIREITO 20, MEDICAMENTO_FP 41 e **LOG_ERRO 0** |
 | `04_BLOCOS_PLSQL` | 5 pessoas com faixa etária e renda; 5 laudos com "Total PcD: 2 (sendo TEA: 1) \| Sem deficiencia: 3" |
 | `05` | Matriz de elegibilidade (60 linhas); `POSSIVEL - Renda per capita 0.2795 SM proxima do limite de 0.2500 SM...`; `NAO_ELEGIVEL - Exige laudo de deficiencia (PcD)`; `Erro tratado: ORA-20023`; `Erro tratado: ORA-20032`; `Erro: Documento ja registrado (id externo ou chave de idempotencia repetidos)`; `DOCUMENTOS_COM_A_CHAVE = 1` |
-| `06` | `Orientacao registrada para o caso 1` (2 vezes) e `Erro tratado: ORA-20041`; `Helena x BPC_IDOSO: ELEGIVEL`; `Pessoa 1: 0 caso(s) aberto(s)`; relatório com `TOTAL GERAL: 31`; o JSON do caso 1; `Erro tratado: ORA-20033`; 4 linhas de auditoria do caso 1; teste 10: `PASSE_IDOSO_INTERESTADUAL: NAO_ELEGIVEL - Renda individual 3.0228 SM acima do limite de 2.0000 SM`; `Rollback complete.` |
+| `06` | `Orientacao registrada para o caso 1` (2 vezes) e `Erro tratado: ORA-20041`; `Helena x BPC_IDOSO: ELEGIVEL`; `Pessoa 1: 0 caso(s) aberto(s)`; relatório com `TOTAL GERAL: 31`; o JSON do caso 1; `Erro tratado: ORA-20033`; 4 linhas de auditoria do caso 1; teste 10: `PASSE_IDOSO_INTERESTADUAL: NAO_ELEGIVEL - Renda individual 3.0228 SM acima do limite de 2.0000 SM`; teste 11 (receita): losartana e metformina `GRATUITO`, atenolol 100mg `DOSAGEM_DIVERGENTE`, clonazepam `NAO_ENCONTRADO` e `Gratuitos: 2 de 4`; teste 12: `Erro tratado: ORA-20061`; `Rollback complete.` |
 | `07` | 9, 22 e 4 linhas e totais 31 e 5 |
 
 Se algum script falhar, confira a mensagem na aba **Script Output**. Para refazer tudo do zero, rode `00_DROP.sql` e depois os demais em ordem (rodar `01` a `03` duas vezes sem o `00` gera erro de objeto já existente e de chave duplicada).
@@ -249,7 +263,7 @@ Os prints abaixo foram tirados após rodar os scripts na ordem. O PDF `documenta
 
 ![T_DF_ORIENTACAO](evidencias/09_t_df_orientacao.png)
 
-**Objetos criados** (11 tabelas, 3 pacotes com body, 7 procedures de carga e 2 gatilhos, todos `VALID`):
+**Objetos criados** (14 tabelas, 4 pacotes com body, 8 procedures de carga e 2 gatilhos, todos `VALID`):
 
 ![Objetos criados](evidencias/10_objetos_criados.png)
 
@@ -293,6 +307,14 @@ Banco intacto após o `ROLLBACK` do teste:
 Regra da renda individual (teste 10 do `06`): Helena com 3 SM numa família de 4 tem 1,0796 SM per capita, mas o passe do idoso olha a renda individual (3,0228 SM) e fica `NAO_ELEGIVEL`:
 
 ![Teste da renda individual](evidencias/25_teste_renda_individual.png)
+
+`T_DF_MEDICAMENTO_FP` (41 itens do elenco oficial do Farmácia Popular):
+
+![T_DF_MEDICAMENTO_FP](evidencias/26_t_df_medicamento_fp.png)
+
+Teste 11 do `06`: receita de Helena com 4 remédios conferidos; a tabela decide o que é gratuito (2 de 4), e o item com dosagem diferente ou fora do elenco só recebe orientação para confirmar na farmácia:
+
+![Teste da Farmácia Popular](evidencias/27_teste_farmacia_popular.png)
 
 ### 6.3 Evidências do MongoDB (MongoDB Compass, `_MONGOSH`)
 
@@ -339,7 +361,7 @@ Nesses prints os relatórios 1 e 2 foram impressos com `print(JSON.stringify(d))
 
 **Este banco é só do Java.** O banco da API .NET é outro e usa as migrations do próprio .NET: não há FK nem acesso direto entre os dois. A ligação é feita só por mensagem (RabbitMQ) e pelo `DES_ID_EXTERNO` do documento.
 
-**Chamadas ao banco:** a regra decide no Oracle. Use `PKG_ELEGIBILIDADE.PRC_ABRIR_CASOS(p_id_pessoa, p_dt_ref)` para avaliar e abrir os casos, `PKG_ELEGIBILIDADE.FN_AVALIAR_ELEGIBILIDADE(p_id_pessoa, p_cod_direito, p_dt_ref)` para consultar, e `PKG_CASOS.PRC_ATUALIZAR_STATUS_CASO(p_id_caso, p_novo_status, p_dt_ref)` para mudar status e `PKG_CASOS.PRC_REGISTRAR_ORIENTACAO(p_id_caso, p_passo_a_passo, p_fonte, p_modelo)` para gravar (ou substituir) a orientação gerada pela IA. `p_dt_ref` pode ser omitido (usa `SYSDATE`) com `StoredProcedureQuery` ou `SimpleJdbcCall`.
+**Chamadas ao banco:** a regra decide no Oracle. Use `PKG_ELEGIBILIDADE.PRC_ABRIR_CASOS(p_id_pessoa, p_dt_ref)` para avaliar e abrir os casos, `PKG_ELEGIBILIDADE.FN_AVALIAR_ELEGIBILIDADE(p_id_pessoa, p_cod_direito, p_dt_ref)` para consultar, e `PKG_CASOS.PRC_ATUALIZAR_STATUS_CASO(p_id_caso, p_novo_status, p_dt_ref)` para mudar status e `PKG_CASOS.PRC_REGISTRAR_ORIENTACAO(p_id_caso, p_passo_a_passo, p_fonte, p_modelo)` para gravar (ou substituir) a orientação gerada pela IA. Para a Farmácia Popular: `PKG_FARMACIA_POPULAR.PRC_REGISTRAR_RECEITA(p_id_pessoa, p_id_documento, p_id_receita OUT)` e, para cada remédio já conferido pela pessoa, `PKG_FARMACIA_POPULAR.PRC_ADICIONAR_ITEM(p_id_receita, p_nome_lido, p_principio, p_concentracao, p_corrigido)`. `p_dt_ref` pode ser omitido (usa `SYSDATE`) com `StoredProcedureQuery` ou `SimpleJdbcCall`.
 
 **Erros do banco para o `@RestControllerAdvice`:**
 
@@ -352,6 +374,8 @@ Nesses prints os relatórios 1 e 2 foram impressos com `print(JSON.stringify(d))
 | `ORA-20032` | caso `CONCEDIDO`/`NEGADO` não muda mais | 409 |
 | `ORA-20033` | transição de status inválida | 409 |
 | `ORA-20034` | prazo anterior à abertura | 422 |
+| `ORA-20060` | pessoa não encontrada ao registrar receita | 404 |
+| `ORA-20061` | receita não encontrada ao adicionar item ou gerar relatório | 404 |
 | `ORA-00001` em `UK_DF_CASO_PESSOA_DIREITO` | caso duplicado | 409 |
 | `ORA-00001` em `UK_DF_DOCUMENTO_IDEM` ou `UK_DF_DOCUMENTO_EXT` | evento/documento repetido (idempotência) | ignorar o evento ou 200 com o registro já existente |
 | `ORA-00001` em `UK_DF_USUARIO_CPF` / `_EMAIL` | cadastro duplicado | 409 |
@@ -368,6 +392,7 @@ Nesses prints os relatórios 1 e 2 foram impressos com `print(JSON.stringify(d))
 | Meus familiares e laudos | `T_DF_PESSOA`, `T_DF_LAUDO`, `T_DF_DOCUMENTO` (status do envio) |
 | Direitos encontrados | `T_DF_CASO` (`RESULTADO_AVALIACAO`, `DES_MOTIVO`, `STATUS`, `DT_PRAZO`) + `T_DF_DIREITO` (nome, órgão, base legal) |
 | Detalhe do caso | `T_DF_ORIENTACAO` (passo a passo e fonte) e o histórico de status em `T_DF_AUDITORIA_CASO` |
+| Farmácia Popular | `T_DF_RECEITA` e `T_DF_RECEITA_ITEM` (resultado e orientação por remédio); a tela de conferência da leitura da IA vem antes de chamar `PRC_ADICIONAR_ITEM` |
 | Painel do assistente social (`GESTOR`) | casos por prazo e por status (`07_RELATORIOS_ORACLE.sql` e `PRC_REL_CASOS_POR_STATUS`) |
 
 ---
@@ -376,11 +401,11 @@ Nesses prints os relatórios 1 e 2 foram impressos com `print(JSON.stringify(d))
 
 - **Oracle:** os scripts `00` a `08` foram executados na ordem no Oracle SQL Developer, sem erros de compilação, e os resultados batem com as seções 5 e 6.1 (evidências na seção 6.2). Os mesmos scripts e as migrations do `flyway/` também foram validados do zero em Oracle Free (23ai) via SQL*Plus; nesse cliente use `SET SQLBLANKLINES ON` (o SQL Developer não precisa).
 - **MongoDB:** os scripts `mongo/01_setup_e_carga.js` e `mongo/02_consultas.js` foram executados no MongoDB (Compass, `_MONGOSH`); a carga criou 2 collections com 36 documentos e os resultados dos relatórios batem com os do Oracle (seção 5). O Mongo guarda as datas em UTC (`2026-11-05T00:00:00Z`) e o `DATE` do Oracle não tem fuso, o que não altera nenhum resultado.
-- **Catálogo de direitos:** os valores e as regras abaixo foram conferidos em 09/11/2026 em páginas oficiais (gov.br e planalto.gov.br). Os 13 direitos conferidos estão com `STA_VERIFICACAO = 'VERIFICADO'`; os 7 restantes seguem `CONFIRMAR` (3 do catálogo original e 4 acrescentados depois).
+- **Catálogo de direitos:** os valores e as regras abaixo foram conferidos em 09 e 10/11/2026 em páginas oficiais (gov.br e planalto.gov.br). Os **20 direitos** estão com `STA_VERIFICACAO = 'VERIFICADO'`. Isso significa que a regra do banco foi comparada com a fonte oficial abaixo; as escolhas do projeto que a lei não define (idades mínimas e máxima, a tolerância de 20%, o que o banco não modela) estão nas ressalvas. A coluna continua aceitando `CONFIRMAR` para direitos futuros.
 
 | Item no banco | Regra | Status | Fonte oficial |
 |---|---|---|---|
-| Salário mínimo 2026 | R$ 1.621,00 | Conferido | [Decreto 12.797/2025 (Planalto)](https://www.planalto.gov.br/ccivil_03/_ato2023-2026/2025/decreto/d12797.htm) |
+| Salário mínimo 2026 | R$ 1.621,00 (2025: R$ 1.518,00, Decreto 12.342/2024) | Conferido | [Decreto 12.797/2025 (Planalto)](https://www.planalto.gov.br/ccivil_03/_ato2023-2026/2025/decreto/d12797.htm) |
 | `BPC_IDOSO` e `BPC_PCD` | até 1/4 do SM per capita (R$ 405,25) | `VERIFICADO` | [INSS: regras do BPC](https://www.gov.br/inss/pt-br/noticias/nao-caia-em-informacao-falsa-sobre-regras-do-bpc) |
 | `TARIFA_SOCIAL_ENERGIA` | até 1/2 SM per capita (CadÚnico) | `VERIFICADO` | [Lei 12.212/2010 (Planalto)](http://www.planalto.gov.br/ccivil_03/_ato2007-2010/2010/lei/l12212.htm) e [ANEEL](https://www.gov.br/aneel/pt-br/assuntos/noticias/2025/tarifa-social-movimenta-mais-de-6-bilhoes-em-descontos-em-2024-para-familias-carentes) |
 | `CADUNICO` | até 1/2 SM per capita (art. 5º, II) | `VERIFICADO` | [Decreto 11.016/2022 (Planalto)](https://www.planalto.gov.br/ccivil_03/_ato2019-2022/2022/decreto/d11016.htm) |
@@ -392,15 +417,15 @@ Nesses prints os relatórios 1 e 2 foram impressos com `print(JSON.stringify(d))
 | `PRIORIDADE_IDOSO` e `PRIORIDADE_PCD` | 60 anos ou mais; pessoa com deficiência | `VERIFICADO` | [Lei 10.048/2000 (Planalto)](https://www.planalto.gov.br/ccivil_03/leis/l10048.htm) |
 | `COTA_PCD_CONCURSO` | PcD, mínimo 5% das vagas; idade mínima 18 | `VERIFICADO` | [Decreto 9.508/2018 (Planalto)](https://planalto.gov.br/CCiViL_03/_Ato2015-2018/2018/Decreto/D9508.htm) e [MGI](https://www.gov.br/gestao/pt-br/assuntos/acoes-afirmativas-na-gestao-1/reserva-de-vagas-para-pessoas-com-deficiencia-em-concursos-publicos) |
 | `COTA_PCD_EMPREGO` | empresas com 100+ empregados reservam 2% a 5%; idade mínima 16 | `VERIFICADO` | [Lei 8.213/1991, art. 93 (Planalto)](https://www.planalto.gov.br/ccivil_03/leis/l8213cons.htm) |
-| `COTA_PCD_ENSINO_SUPERIOR` | PcD; idade mínima 16 (escolha do projeto) | `CONFIRMAR` | [Lei 13.409/2016 (Planalto)](https://www.planalto.gov.br/ccivil_03/_ato2015-2018/2016/lei/l13409.htm) |
-| `BOLSA_FAMILIA` | até R$ 218 per capita (guardado como 0,135 SM) | `CONFIRMAR` | [MDS: conheça as regras](https://www.gov.br/mds/pt-br/acoes-e-programas/bolsa-familia/paginas/conheca-as-regras) |
-| `ISENCAO_IR_65MAIS` | parcela isenta de R$ 1.903,98/mês sobre aposentadoria e pensão | `CONFIRMAR` | [Receita Federal](https://www.gov.br/receitafederal/pt-br/assuntos/meu-imposto-de-renda/preenchimento/isencao65) |
-| `ACOMPANHANTE_ESCOLAR_TEA` | TEA, até 17 anos (idade máxima é escolha do projeto); depende de necessidade comprovada | `CONFIRMAR` | [Lei 12.764/2012 (Planalto)](https://www.planalto.gov.br/ccivil_03/_ato2011-2014/2012/lei/l12764.htm) |
-| `MEIA_ENTRADA_PCD` | pessoa com deficiência (acompanhante quando necessário) | `CONFIRMAR` | [Lei 12.933/2013 (Planalto)](https://www.planalto.gov.br/ccivil_03/_ato2011-2014/2013/lei/l12933.htm) |
-| `CREDENCIAL_IDOSO` | 60+ | `CONFIRMAR` | Resolução CONTRAN 965/2022, que substituiu as Resoluções 303 e 304/2008 |
-| `CREDENCIAL_PCD` | deficiência física (mobilidade reduzida) | `CONFIRMAR` | Resolução CONTRAN 965/2022 e Lei 10.098/2000 |
+| `COTA_PCD_ENSINO_SUPERIOR` | PcD; reserva por curso e turno nas instituições federais; a lei não fixa idade (16 é escolha do projeto) | `VERIFICADO` | [Lei 13.409/2016, que altera a Lei 12.711 (Planalto)](https://www.planalto.gov.br/ccivil_03/_ato2015-2018/2016/lei/l13409.htm) |
+| `BOLSA_FAMILIA` | até R$ 218 por pessoa da família, inscrita no CadÚnico (guardado como 0,1345 SM = R$ 218,03 com o SM de 2026) | `VERIFICADO` | [MDS: conheça as regras ("renda mensal por pessoa da família de até R$ 218")](https://www.gov.br/mds/pt-br/acoes-e-programas/bolsa-familia/paginas/conheca-as-regras) |
+| `ISENCAO_IR_65MAIS` | 65+: parcela isenta adicional sobre aposentadoria e pensão, a partir do mês em que completa 65 anos | `VERIFICADO` | [Receita Federal: isenção 65+](https://www.gov.br/receitafederal/pt-br/assuntos/meu-imposto-de-renda/preenchimento/isencao65) e [Lei 15.270/2025 (Planalto)](https://www.planalto.gov.br/ccivil_03/_ato2023-2026/2025/lei/l15270.htm), que não altera o art. 6º, XV, da Lei 7.713/1988 |
+| `ACOMPANHANTE_ESCOLAR_TEA` | TEA em classe comum de ensino regular, com comprovada necessidade; a lei não fixa idade (até 17 é escolha do projeto) | `VERIFICADO` | [Lei 12.764/2012, art. 3º, parágrafo único (Planalto)](https://www.planalto.gov.br/ccivil_03/_ato2011-2014/2012/lei/l12764.htm) |
+| `MEIA_ENTRADA_PCD` | pessoa com deficiência (e acompanhante quando necessário), sem exigência de renda | `VERIFICADO` | [Lei 12.933/2013, art. 1º, § 8º (Planalto)](https://www.planalto.gov.br/ccivil_03/_ato2011-2014/2013/lei/l12933.htm) |
+| `CREDENCIAL_IDOSO` | 60+; credencial emitida pelo órgão de trânsito do município, validade de 5 anos | `VERIFICADO` | [Estatuto da Pessoa Idosa, arts. 1º e 41 (Planalto)](https://www.planalto.gov.br/ccivil_03/leis/2003/l10.741.htm) e [Resolução CONTRAN 965/2022, arts. 3º, 12 e 13](https://www.normasbrasil.com.br/norma/resolucao-965-2022_431903.html) |
+| `CREDENCIAL_PCD` | pessoa com deficiência com comprometimento de mobilidade (o banco usa o laudo `DEF_FISICA` como aproximação); validade de 5 anos se permanente | `VERIFICADO` | [Resolução CONTRAN 965/2022, arts. 3º, II, 12 e 13](https://www.normasbrasil.com.br/norma/resolucao-965-2022_431903.html) |
 
-Ressalvas: (1) o `POSSIVEL` (tolerância de 20% sobre o limite) é uma escolha do projeto para sinalizar renda próxima do limite; o BPC pode ser concedido acima de 1/4 SM com prova de vulnerabilidade, mas isso exige análise caso a caso; (2) a isenção de IOF vale só para deficiência física e exige CNH; por isso o banco usa o tipo de deficiência exigido (`COD_TIPO_EXIGIDO`) e idade mínima 18, e Lucas (7 anos, TEA) não é elegível; (3) as idades mínimas das cotas (18 para concurso, 16 para emprego e ensino superior) são regras práticas do projeto, e a cota de ensino superior também depende de o candidato ter cursado o ensino médio em escola pública, o que o banco não modela; (4) segundo a Receita, o benefício de IPI para PcD está garantido até 31/12/2026, e a isenção exige laudo assinado por médico (e, no caso de autismo, também por psicólogo); (5) o valor de R$ 218 do Bolsa Família aparece nas páginas do MDS, mas não foi confirmado que é o de 2026; (6) não foi confirmado se a Lei 15.270/2025 alterou o art. 6º, XV, da Lei 7.713/1988 (IR 65+); (7) os 4 direitos acrescentados depois (acompanhante escolar, meia-entrada e as duas credenciais) ainda precisam de conferência no texto oficial (Decreto 8.368/2014, Decreto 8.537/2015 e Resolução CONTRAN 965/2022); (8) o passe do idoso usa a **renda individual** e não a per capita, porque a lei fala em renda da pessoa; (9) as normas mudam com frequência; reconfira antes de usar em produção.
+Ressalvas: (1) o `POSSIVEL` (tolerância de 20% sobre o limite) é uma escolha do projeto para sinalizar renda próxima do limite; o BPC pode ser concedido acima de 1/4 SM com prova de vulnerabilidade, mas isso exige análise caso a caso; (2) a isenção de IOF vale só para deficiência física e exige CNH; por isso o banco usa o tipo de deficiência exigido (`COD_TIPO_EXIGIDO`) e idade mínima 18, e Lucas (7 anos, TEA) não é elegível; (3) as idades mínimas das cotas (18 para concurso, 16 para emprego e ensino superior) e a idade máxima de 17 do acompanhante escolar são regras práticas do projeto, pois a lei não as fixa; a cota de ensino superior também pode depender de o candidato ter cursado o ensino médio em escola pública, o que o banco não modela; (4) segundo a Receita, o benefício de IPI para PcD está garantido até 31/12/2026, e a isenção exige laudo assinado por médico (e, no caso de autismo, também por psicólogo); (5) o Bolsa Família exige inscrição no CadÚnico e a entrada depende de orçamento disponível; o banco só compara a renda per capita; (6) a isenção de IR 65+ só vale sobre aposentadoria e pensão, e o banco não registra a origem da renda (só a idade); o valor mensal da parcela está na tabela da Receita (IN RFB 1.500/2014, Anexo I) e não é guardado no banco; (7) a credencial de estacionamento exige comprometimento de mobilidade; o banco usa o laudo `DEF_FISICA` como aproximação, e a emissão depende do órgão de trânsito do município; (8) o passe do idoso usa a **renda individual** e não a per capita, porque a lei fala em renda da pessoa; (9) as normas mudam com frequência; reconfira antes de usar em produção.
 - Dados, pessoas e laudos são **fictícios**.
 
 ## 9. Uso de IA generativa (declaração exigida pelo PDF da Global Solution)
