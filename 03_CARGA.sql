@@ -34,11 +34,11 @@ END;
 -- PESSOAS (as 3 personas da demo + 2 casos de teste negativo/limite)
 ------------------------------------------------------------
 BEGIN
-    PRC_CARGA_PESSOA(1, 'Lucas Almeida', DATE '2019-03-14', 1200.00, 4);
-    PRC_CARGA_PESSOA(2, 'Carlos Menezes', DATE '1985-07-22', 6500.00, 2);
-    PRC_CARGA_PESSOA(3, 'Helena Souza', DATE '1958-01-30', 750.00, 2);
-    PRC_CARGA_PESSOA(4, 'Marcos Teixeira', DATE '1991-05-10', 1500.00, 1);
-    PRC_CARGA_PESSOA(5, 'Rita Barbosa', DATE '1960-03-02', 906.00, 2);
+    PRC_CARGA_PESSOA(1, 'Lucas Almeida', DATE '2019-03-14', 1200.00, 4, 0);
+    PRC_CARGA_PESSOA(2, 'Carlos Menezes', DATE '1985-07-22', 6500.00, 2, 4500);
+    PRC_CARGA_PESSOA(3, 'Helena Souza', DATE '1958-01-30', 750.00, 2, 750);
+    PRC_CARGA_PESSOA(4, 'Marcos Teixeira', DATE '1991-05-10', 1500.00, 1, 1500);
+    PRC_CARGA_PESSOA(5, 'Rita Barbosa', DATE '1960-03-02', 906.00, 2, 906);
 END;
 /
 
@@ -67,7 +67,7 @@ END;
 /
 
 ------------------------------------------------------------
--- CATALOGO DE DIREITOS (15) - STA_VERIFICACAO = VERIFICADO nos 12 direitos conferidos em paginas oficiais em 09/11/2026; CONFIRMAR nos demais
+-- CATALOGO DE DIREITOS (20) - STA_VERIFICACAO = VERIFICADO nos 13 direitos conferidos em paginas oficiais em 09/11/2026; CONFIRMAR nos demais
 ------------------------------------------------------------
 BEGIN
     PRC_CARGA_DIREITO('BPC_IDOSO', 'BPC/LOAS - Idoso 65+', 'INSS', 'Lei 8.742/1993 art. 20', 'IDOSO', 45, 'VERIFICADO');
@@ -85,6 +85,11 @@ BEGIN
     PRC_CARGA_DIREITO('COTA_PCD_EMPREGO', 'Reserva de vagas PcD em empresas', 'Ministerio do Trabalho', 'Lei 8.213/1991 art. 93', 'PCD', 30, 'VERIFICADO');
     PRC_CARGA_DIREITO('PRIORIDADE_IDOSO', 'Atendimento prioritario - Idoso 60+', 'Qualquer orgao publico', 'Lei 10.048/2000', 'IDOSO', 30, 'VERIFICADO');
     PRC_CARGA_DIREITO('ISENCAO_IR_65MAIS', 'Parcela isenta adicional de IR - 65+', 'Receita Federal', 'Lei 7.713/1988 art. 6 XV', 'IDOSO', 30, 'CONFIRMAR');
+    PRC_CARGA_DIREITO('PRIORIDADE_PCD', 'Atendimento prioritario - Pessoa com Deficiencia', 'Qualquer orgao publico', 'Lei 10.048/2000', 'PCD', 30, 'VERIFICADO');
+    PRC_CARGA_DIREITO('ACOMPANHANTE_ESCOLAR_TEA', 'Acompanhante especializado na escola - TEA', 'Escola / rede de ensino', 'Lei 12.764/2012 art. 3 par. unico', 'AUTISMO', 30, 'CONFIRMAR');
+    PRC_CARGA_DIREITO('MEIA_ENTRADA_PCD', 'Meia-entrada em eventos culturais e esportivos - PcD', 'Organizador do evento', 'Lei 12.933/2013 art. 1 par. 8', 'PCD', 30, 'CONFIRMAR');
+    PRC_CARGA_DIREITO('CREDENCIAL_IDOSO', 'Credencial de estacionamento - Idoso 60+', 'Orgao de transito municipal', 'Resolucao CONTRAN 965/2022', 'IDOSO', 30, 'CONFIRMAR');
+    PRC_CARGA_DIREITO('CREDENCIAL_PCD', 'Credencial de estacionamento - PcD fisica', 'Orgao de transito municipal', 'Resolucao CONTRAN 965/2022', 'PCD', 30, 'CONFIRMAR');
 END;
 /
 
@@ -95,7 +100,7 @@ BEGIN
     PRC_CARGA_CRITERIO('BPC_IDOSO', 65, NULL, 'N', 'N', NULL, 0.25, 20);
     PRC_CARGA_CRITERIO('BPC_PCD', 0, NULL, 'S', 'N', NULL, 0.25, 20);
     PRC_CARGA_CRITERIO('PASSE_LIVRE_PCD', 0, NULL, 'S', 'N', NULL, 1.0, 20);
-    PRC_CARGA_CRITERIO('PASSE_IDOSO_INTERESTADUAL', 60, NULL, 'N', 'N', NULL, 2.0, 0);
+    PRC_CARGA_CRITERIO('PASSE_IDOSO_INTERESTADUAL', 60, NULL, 'N', 'N', NULL, 2.0, 0, 'S');
     PRC_CARGA_CRITERIO('ISENCAO_IPI_VEICULO_PCD', 0, NULL, 'S', 'N', NULL, NULL, 0);
     PRC_CARGA_CRITERIO('ISENCAO_IOF_VEICULO_PCD', 18, NULL, 'S', 'N', 'DEF_FISICA', NULL, 0);
     PRC_CARGA_CRITERIO('CIPTEA', 0, NULL, 'N', 'S', NULL, NULL, 0);
@@ -107,6 +112,11 @@ BEGIN
     PRC_CARGA_CRITERIO('COTA_PCD_EMPREGO', 16, NULL, 'S', 'N', NULL, NULL, 0);
     PRC_CARGA_CRITERIO('PRIORIDADE_IDOSO', 60, NULL, 'N', 'N', NULL, NULL, 0);
     PRC_CARGA_CRITERIO('ISENCAO_IR_65MAIS', 65, NULL, 'N', 'N', NULL, NULL, 0);
+    PRC_CARGA_CRITERIO('PRIORIDADE_PCD', 0, NULL, 'S', 'N', NULL, NULL, 0);
+    PRC_CARGA_CRITERIO('ACOMPANHANTE_ESCOLAR_TEA', 0, 17, 'N', 'S', NULL, NULL, 0);
+    PRC_CARGA_CRITERIO('MEIA_ENTRADA_PCD', 0, NULL, 'S', 'N', NULL, NULL, 0);
+    PRC_CARGA_CRITERIO('CREDENCIAL_IDOSO', 60, NULL, 'N', 'N', NULL, NULL, 0);
+    PRC_CARGA_CRITERIO('CREDENCIAL_PCD', 0, NULL, 'S', 'N', 'DEF_FISICA', NULL, 0);
 END;
 /
 

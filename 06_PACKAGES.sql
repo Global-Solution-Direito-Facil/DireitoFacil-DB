@@ -59,7 +59,8 @@ END PKG_AUDITORIA;
 CREATE OR REPLACE PACKAGE PKG_ELEGIBILIDADE IS
 
     FUNCTION FN_RENDA_PER_CAPITA_SM (
-        p_id_pessoa IN NUMBER
+        p_id_pessoa  IN NUMBER,
+        p_individual IN VARCHAR2 DEFAULT 'N'
     ) RETURN NUMBER;
 
     PROCEDURE PRC_AVALIAR_DIREITO (
@@ -87,15 +88,17 @@ END PKG_ELEGIBILIDADE;
 CREATE OR REPLACE PACKAGE BODY PKG_ELEGIBILIDADE IS
 
 FUNCTION FN_RENDA_PER_CAPITA_SM (
-    p_id_pessoa IN NUMBER
+    p_id_pessoa  IN NUMBER,
+    p_individual IN VARCHAR2
 ) RETURN NUMBER
 IS
     v_renda    T_DF_PESSOA.VLR_RENDA_FAMILIAR%TYPE;
     v_membros  T_DF_PESSOA.QTD_MEMBROS_FAMILIA%TYPE;
+    v_indiv    T_DF_PESSOA.VLR_RENDA_INDIVIDUAL%TYPE;
     v_sm       T_DF_SALARIO_MINIMO.VLR_SALARIO_MINIMO%TYPE;
 BEGIN
-    SELECT VLR_RENDA_FAMILIAR, QTD_MEMBROS_FAMILIA
-    INTO v_renda, v_membros
+    SELECT VLR_RENDA_FAMILIAR, QTD_MEMBROS_FAMILIA, VLR_RENDA_INDIVIDUAL
+    INTO v_renda, v_membros, v_indiv
     FROM T_DF_PESSOA
     WHERE ID_PESSOA = p_id_pessoa;
 
@@ -103,6 +106,10 @@ BEGIN
     FROM T_DF_SALARIO_MINIMO
     WHERE ANO_REFERENCIA = (SELECT MAX(ANO_REFERENCIA) FROM T_DF_SALARIO_MINIMO);
 
+    -- 'S' = renda da propria pessoa (ex.: passe do idoso); 'N' = renda familiar por pessoa da familia
+    IF p_individual = 'S' THEN
+        RETURN ROUND(v_indiv / v_sm, 4);
+    END IF;
     RETURN ROUND((v_renda / v_membros) / v_sm, 4);
 EXCEPTION
     WHEN NO_DATA_FOUND THEN
@@ -128,6 +135,7 @@ IS
     v_crit     T_DF_CRITERIO_DIREITO%ROWTYPE;
     v_txt_f    VARCHAR2(10);
     v_txt_l    VARCHAR2(10);
+    v_rot      VARCHAR2(20);
 BEGIN
     SELECT DT_NASCIMENTO INTO v_dt_nasc
     FROM T_DF_PESSOA WHERE ID_PESSOA = p_id_pessoa;
@@ -155,7 +163,8 @@ BEGIN
         v_tipo := 1;
     END IF;
 
-    v_fracao := FN_RENDA_PER_CAPITA_SM(p_id_pessoa);
+    v_fracao := FN_RENDA_PER_CAPITA_SM(p_id_pessoa, v_crit.STA_RENDA_INDIVIDUAL);
+    v_rot    := CASE WHEN v_crit.STA_RENDA_INDIVIDUAL = 'S' THEN 'Renda individual ' ELSE 'Renda per capita ' END;
     v_txt_f  := TO_CHAR(v_fracao, 'FM990D0000', 'NLS_NUMERIC_CHARACTERS=''.,''');
     v_txt_l  := TO_CHAR(v_crit.FRC_SM_MAX, 'FM990D0000', 'NLS_NUMERIC_CHARACTERS=''.,''');
 
@@ -177,14 +186,14 @@ BEGIN
         p_motivo := 'Criterios atendidos (sem limite de renda)';
     ELSIF v_fracao <= v_crit.FRC_SM_MAX THEN
         p_status := 'ELEGIVEL';
-        p_motivo := 'Renda per capita ' || v_txt_f || ' SM dentro do limite de ' || v_txt_l || ' SM';
+        p_motivo := v_rot || v_txt_f || ' SM dentro do limite de ' || v_txt_l || ' SM';
     ELSIF v_fracao <= v_crit.FRC_SM_MAX * (1 + v_crit.PCT_TOLERANCIA / 100) THEN
         p_status := 'POSSIVEL';
-        p_motivo := 'Renda per capita ' || v_txt_f || ' SM proxima do limite de ' || v_txt_l
+        p_motivo := v_rot || v_txt_f || ' SM proxima do limite de ' || v_txt_l
                     || ' SM; confirmar renda no CadUnico';
     ELSE
         p_status := 'NAO_ELEGIVEL';
-        p_motivo := 'Renda per capita ' || v_txt_f || ' SM acima do limite de ' || v_txt_l || ' SM';
+        p_motivo := v_rot || v_txt_f || ' SM acima do limite de ' || v_txt_l || ' SM';
     END IF;
 EXCEPTION
     WHEN NO_DATA_FOUND THEN
@@ -590,5 +599,22 @@ EXCEPTION
 END;
 /
 
--- Desfaz os testes 5 e 8 (os dados voltam ao estado da carga, igual ao MongoDB)
+-- Teste 10: regra da renda individual - o passe do idoso olha a renda da PESSOA, nao a per capita
+-- Helena passa a ganhar 4900 (3 SM) numa familia de 4 pessoas (7000): per capita = 1,08 SM, individual = 3,02 SM
+UPDATE T_DF_PESSOA SET VLR_RENDA_FAMILIAR = 7000, VLR_RENDA_INDIVIDUAL = 4900, QTD_MEMBROS_FAMILIA = 4
+WHERE ID_PESSOA = 3;
+DECLARE
+    v_id     NUMBER;
+    v_status VARCHAR2(15);
+    v_motivo VARCHAR2(300);
+BEGIN
+    DBMS_OUTPUT.PUT_LINE('Renda per capita (SM): ' || PKG_ELEGIBILIDADE.FN_RENDA_PER_CAPITA_SM(3));
+    DBMS_OUTPUT.PUT_LINE('Renda individual (SM): ' || PKG_ELEGIBILIDADE.FN_RENDA_PER_CAPITA_SM(3, 'S'));
+    SELECT ID_DIREITO INTO v_id FROM T_DF_DIREITO WHERE COD_DIREITO = 'PASSE_IDOSO_INTERESTADUAL';
+    PKG_ELEGIBILIDADE.PRC_AVALIAR_DIREITO(3, v_id, DATE '2026-11-05', v_status, v_motivo);
+    DBMS_OUTPUT.PUT_LINE('PASSE_IDOSO_INTERESTADUAL: ' || v_status || ' - ' || v_motivo);
+END;
+/
+
+-- Desfaz os testes 5, 8 e 10 (os dados voltam ao estado da carga, igual ao MongoDB)
 ROLLBACK;

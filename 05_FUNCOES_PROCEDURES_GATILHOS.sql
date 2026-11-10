@@ -11,7 +11,7 @@ SET SERVEROUTPUT ON;
 ------------------------------------------------------------
 -- REGRA DE NEGOCIO CENTRAL: "A REGRA DECIDE, A IA EXPLICA"
 -- A elegibilidade de cada direito e decidida aqui, em PL/SQL, a
--- partir da tabela T_DF_CRITERIO_DIREITO. Deterministica, testavel
+-- partir da tabela T_DF_CRITERIO_DIR   EITO. Deterministica, testavel
 -- e auditavel. A IA (Spring AI) so extrai dados do laudo e explica.
 -- O parametro p_dt_ref (padrao SYSDATE) permite reproduzir os testes
 -- com data fixa.
@@ -21,15 +21,17 @@ SET SERVEROUTPUT ON;
 -- FUNCTION: FN_RENDA_PER_CAPITA_SM
 ------------------------------------------------------------
 CREATE OR REPLACE FUNCTION FN_RENDA_PER_CAPITA_SM (
-    p_id_pessoa IN NUMBER
+    p_id_pessoa  IN NUMBER,
+    p_individual IN VARCHAR2 DEFAULT 'N'
 ) RETURN NUMBER
 IS
     v_renda    T_DF_PESSOA.VLR_RENDA_FAMILIAR%TYPE;
     v_membros  T_DF_PESSOA.QTD_MEMBROS_FAMILIA%TYPE;
+    v_indiv    T_DF_PESSOA.VLR_RENDA_INDIVIDUAL%TYPE;
     v_sm       T_DF_SALARIO_MINIMO.VLR_SALARIO_MINIMO%TYPE;
 BEGIN
-    SELECT VLR_RENDA_FAMILIAR, QTD_MEMBROS_FAMILIA
-    INTO v_renda, v_membros
+    SELECT VLR_RENDA_FAMILIAR, QTD_MEMBROS_FAMILIA, VLR_RENDA_INDIVIDUAL
+    INTO v_renda, v_membros, v_indiv
     FROM T_DF_PESSOA
     WHERE ID_PESSOA = p_id_pessoa;
 
@@ -37,6 +39,10 @@ BEGIN
     FROM T_DF_SALARIO_MINIMO
     WHERE ANO_REFERENCIA = (SELECT MAX(ANO_REFERENCIA) FROM T_DF_SALARIO_MINIMO);
 
+    -- 'S' = renda da propria pessoa (ex.: passe do idoso); 'N' = renda familiar por pessoa da familia
+    IF p_individual = 'S' THEN
+        RETURN ROUND(v_indiv / v_sm, 4);
+    END IF;
     RETURN ROUND((v_renda / v_membros) / v_sm, 4);
 EXCEPTION
     WHEN NO_DATA_FOUND THEN
@@ -66,6 +72,7 @@ IS
     v_crit     T_DF_CRITERIO_DIREITO%ROWTYPE;
     v_txt_f    VARCHAR2(10);
     v_txt_l    VARCHAR2(10);
+    v_rot      VARCHAR2(20);
 BEGIN
     SELECT DT_NASCIMENTO INTO v_dt_nasc
     FROM T_DF_PESSOA WHERE ID_PESSOA = p_id_pessoa;
@@ -93,7 +100,8 @@ BEGIN
         v_tipo := 1;
     END IF;
 
-    v_fracao := FN_RENDA_PER_CAPITA_SM(p_id_pessoa);
+    v_fracao := FN_RENDA_PER_CAPITA_SM(p_id_pessoa, v_crit.STA_RENDA_INDIVIDUAL);
+    v_rot    := CASE WHEN v_crit.STA_RENDA_INDIVIDUAL = 'S' THEN 'Renda individual ' ELSE 'Renda per capita ' END;
     v_txt_f  := TO_CHAR(v_fracao, 'FM990D0000', 'NLS_NUMERIC_CHARACTERS=''.,''');
     v_txt_l  := TO_CHAR(v_crit.FRC_SM_MAX, 'FM990D0000', 'NLS_NUMERIC_CHARACTERS=''.,''');
 
@@ -115,14 +123,14 @@ BEGIN
         p_motivo := 'Criterios atendidos (sem limite de renda)';
     ELSIF v_fracao <= v_crit.FRC_SM_MAX THEN
         p_status := 'ELEGIVEL';
-        p_motivo := 'Renda per capita ' || v_txt_f || ' SM dentro do limite de ' || v_txt_l || ' SM';
+        p_motivo := v_rot || v_txt_f || ' SM dentro do limite de ' || v_txt_l || ' SM';
     ELSIF v_fracao <= v_crit.FRC_SM_MAX * (1 + v_crit.PCT_TOLERANCIA / 100) THEN
         p_status := 'POSSIVEL';
-        p_motivo := 'Renda per capita ' || v_txt_f || ' SM proxima do limite de ' || v_txt_l
+        p_motivo := v_rot || v_txt_f || ' SM proxima do limite de ' || v_txt_l
                     || ' SM; confirmar renda no CadUnico';
     ELSE
         p_status := 'NAO_ELEGIVEL';
-        p_motivo := 'Renda per capita ' || v_txt_f || ' SM acima do limite de ' || v_txt_l || ' SM';
+        p_motivo := v_rot || v_txt_f || ' SM acima do limite de ' || v_txt_l || ' SM';
     END IF;
 EXCEPTION
     WHEN NO_DATA_FOUND THEN
@@ -319,7 +327,7 @@ END;
 /
 
 ------------------------------------------------------------
--- CARGA DOS CASOS: avalia as 15 regras para cada pessoa e abre um caso
+-- CARGA DOS CASOS: avalia as 20 regras para cada pessoa e abre um caso
 -- para cada direito ELEGIVEL ou POSSIVEL (data de referencia fixa)
 ------------------------------------------------------------
 BEGIN

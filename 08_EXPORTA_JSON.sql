@@ -13,7 +13,7 @@
 --   (rode o EXEC abaixo)
 --   SPOOL OFF
 -- Depois: mongoimport --db citizentech --collection casos --file casos.json --jsonArray
--- (a parte MongoDB do projeto carrega esses mesmos 27 documentos pelos scripts da pasta mongo/)
+-- (a parte MongoDB do projeto carrega esses mesmos 31 documentos pelos scripts da pasta mongo/)
 
 SET SERVEROUTPUT ON SIZE UNLIMITED;
 SET LINESIZE 4000;
