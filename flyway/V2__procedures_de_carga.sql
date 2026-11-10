@@ -291,3 +291,40 @@ EXCEPTION
         DBMS_OUTPUT.PUT_LINE('Erro [' || v_codigo || ']: ' || v_erro);
 END;
 /
+
+------------------------------------------------------------
+-- PROCEDURE: PRC_CARGA_MEDICAMENTO_FP
+------------------------------------------------------------
+CREATE OR REPLACE PROCEDURE PRC_CARGA_MEDICAMENTO_FP (
+    p_indicacao     IN VARCHAR2,
+    p_tipo          IN VARCHAR2,
+    p_principio     IN VARCHAR2,
+    p_concentracao  IN VARCHAR2,
+    p_observacao    IN VARCHAR2,
+    p_fonte         IN VARCHAR2,
+    p_dt_elenco     IN DATE
+)
+IS
+    v_erro    VARCHAR2(4000);
+    v_codigo  NUMBER;
+BEGIN
+    INSERT INTO T_DF_MEDICAMENTO_FP (COD_INDICACAO, TIPO_ITEM, DES_PRINCIPIO_ATIVO, DES_CONCENTRACAO, DES_OBSERVACAO, DES_FONTE, DT_ELENCO)
+    VALUES (UPPER(p_indicacao), UPPER(p_tipo), p_principio, p_concentracao, p_observacao, p_fonte, p_dt_elenco);
+    DBMS_OUTPUT.PUT_LINE('Item do elenco cadastrado');
+EXCEPTION
+    WHEN DUP_VAL_ON_INDEX THEN
+        INSERT INTO T_DF_LOG_ERRO (NOME_PROCEDURE, CODIGO_ERRO, MENSAGEM_ERRO, DATA_ERRO, USUARIO_BANCO)
+        VALUES ('PRC_CARGA_MEDICAMENTO_FP', 1, 'Item do elenco ja cadastrado', SYSDATE, USER);
+        DBMS_OUTPUT.PUT_LINE('Erro: Item do elenco ja cadastrado');
+    WHEN VALUE_ERROR THEN
+        INSERT INTO T_DF_LOG_ERRO (NOME_PROCEDURE, CODIGO_ERRO, MENSAGEM_ERRO, DATA_ERRO, USUARIO_BANCO)
+        VALUES ('PRC_CARGA_MEDICAMENTO_FP', 2, 'Erro de valor informado', SYSDATE, USER);
+        DBMS_OUTPUT.PUT_LINE('Erro de valor');
+    WHEN OTHERS THEN
+        v_codigo := SQLCODE;
+        v_erro   := SQLERRM;
+        INSERT INTO T_DF_LOG_ERRO (NOME_PROCEDURE, CODIGO_ERRO, MENSAGEM_ERRO, DATA_ERRO, USUARIO_BANCO)
+        VALUES ('PRC_CARGA_MEDICAMENTO_FP', v_codigo, v_erro, SYSDATE, USER);
+        DBMS_OUTPUT.PUT_LINE('Erro [' || v_codigo || ']: ' || v_erro);
+END;
+/

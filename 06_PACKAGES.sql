@@ -485,6 +485,209 @@ END PKG_CASOS;
 /
 
 ------------------------------------------------------------
+-- PACKAGE: PKG_FARMACIA_POPULAR
+-- Consulta de remedios no elenco do Farmacia Popular (a tabela decide; a IA so le a receita).
+-- Fluxo: IA le a foto -> pessoa confere na tela -> Java chama PRC_ADICIONAR_ITEM com o que foi conferido.
+------------------------------------------------------------
+CREATE OR REPLACE PACKAGE PKG_FARMACIA_POPULAR IS
+
+    FUNCTION FN_CONSULTAR_ITEM (
+        p_principio    IN VARCHAR2,
+        p_concentracao IN VARCHAR2
+    ) RETURN VARCHAR2;
+
+    PROCEDURE PRC_REGISTRAR_RECEITA (
+        p_id_pessoa    IN  NUMBER,
+        p_id_documento IN  NUMBER,
+        p_id_receita   OUT NUMBER
+    );
+
+    PROCEDURE PRC_ADICIONAR_ITEM (
+        p_id_receita   IN NUMBER,
+        p_nome_lido    IN VARCHAR2,
+        p_principio    IN VARCHAR2,
+        p_concentracao IN VARCHAR2,
+        p_corrigido    IN VARCHAR2 DEFAULT 'N'
+    );
+
+    PROCEDURE PRC_REL_RECEITA (
+        p_id_receita IN NUMBER
+    );
+
+END PKG_FARMACIA_POPULAR;
+/
+
+CREATE OR REPLACE PACKAGE BODY PKG_FARMACIA_POPULAR IS
+
+-- minusculas, sem acento (UNISTR mantem o script em ASCII) e sem espacos repetidos
+FUNCTION F_NORM (p IN VARCHAR2) RETURN VARCHAR2
+IS
+BEGIN
+    RETURN TRIM(REGEXP_REPLACE(
+        TRANSLATE(LOWER(p),
+                  UNISTR('\00E1\00E0\00E2\00E3\00E4\00E9\00E8\00EA\00EB\00ED\00EC\00EE\00EF\00F3\00F2\00F4\00F5\00F6\00FA\00F9\00FB\00FC\00E7'),
+                  'aaaaaeeeeiiiiooooouuuuc'),
+        '[[:space:]]+', ' '));
+END F_NORM;
+
+-- o principio ativo digitado precisa estar contido no nome do elenco (ex.: "metformina" acha "cloridrato de metformina");
+-- a concentracao precisa ser igual (ignorando espacos); principio achado com outra dosagem = DOSAGEM_DIVERGENTE
+PROCEDURE P_AVALIAR (
+    p_principio    IN  VARCHAR2,
+    p_concentracao IN  VARCHAR2,
+    p_resultado    OUT VARCHAR2,
+    p_id_med       OUT NUMBER
+)
+IS
+    v_p      VARCHAR2(200) := F_NORM(p_principio);
+    v_c      VARCHAR2(100) := REPLACE(F_NORM(p_concentracao), ' ', '');
+    v_achou  BOOLEAN := FALSE;
+BEGIN
+    p_resultado := 'NAO_ENCONTRADO';
+    p_id_med    := NULL;
+    IF v_p IS NULL OR LENGTH(v_p) < 4 THEN
+        RETURN;
+    END IF;
+
+    FOR r IN (SELECT ID_MEDICAMENTO, DES_PRINCIPIO_ATIVO, DES_CONCENTRACAO
+              FROM T_DF_MEDICAMENTO_FP
+              WHERE TIPO_ITEM = 'MEDICAMENTO' AND STA_GRATUITO = 'S'
+              ORDER BY ID_MEDICAMENTO) LOOP
+        IF INSTR(F_NORM(r.DES_PRINCIPIO_ATIVO), v_p) > 0 THEN
+            IF NOT v_achou THEN
+                v_achou     := TRUE;
+                p_resultado := 'DOSAGEM_DIVERGENTE';
+                p_id_med    := r.ID_MEDICAMENTO;
+            END IF;
+            IF REPLACE(F_NORM(r.DES_CONCENTRACAO), ' ', '') = v_c THEN
+                p_resultado := 'GRATUITO';
+                p_id_med    := r.ID_MEDICAMENTO;
+                RETURN;
+            END IF;
+        END IF;
+    END LOOP;
+END P_AVALIAR;
+
+FUNCTION FN_CONSULTAR_ITEM (
+    p_principio    IN VARCHAR2,
+    p_concentracao IN VARCHAR2
+) RETURN VARCHAR2
+IS
+    v_res  VARCHAR2(20);
+    v_id   NUMBER;
+BEGIN
+    P_AVALIAR(p_principio, p_concentracao, v_res, v_id);
+    RETURN v_res;
+END FN_CONSULTAR_ITEM;
+
+PROCEDURE PRC_REGISTRAR_RECEITA (
+    p_id_pessoa    IN  NUMBER,
+    p_id_documento IN  NUMBER,
+    p_id_receita   OUT NUMBER
+)
+IS
+    v_qtd     NUMBER;
+    v_erro    VARCHAR2(4000);
+    v_codigo  NUMBER;
+BEGIN
+    SELECT COUNT(*) INTO v_qtd FROM T_DF_PESSOA WHERE ID_PESSOA = p_id_pessoa;
+    IF v_qtd = 0 THEN
+        RAISE_APPLICATION_ERROR(-20060, 'PRC_REGISTRAR_RECEITA: pessoa ' || p_id_pessoa || ' nao encontrada');
+    END IF;
+
+    INSERT INTO T_DF_RECEITA (ID_PESSOA, ID_DOCUMENTO)
+    VALUES (p_id_pessoa, p_id_documento)
+    RETURNING ID_RECEITA INTO p_id_receita;
+
+    DBMS_OUTPUT.PUT_LINE('Receita ' || p_id_receita || ' registrada');
+EXCEPTION
+    WHEN OTHERS THEN
+        v_codigo := SQLCODE;
+        v_erro   := SQLERRM;
+        INSERT INTO T_DF_LOG_ERRO (NOME_PROCEDURE, CODIGO_ERRO, MENSAGEM_ERRO, DATA_ERRO, USUARIO_BANCO)
+        VALUES ('PRC_REGISTRAR_RECEITA', v_codigo, v_erro, SYSDATE, USER);
+        RAISE;
+END PRC_REGISTRAR_RECEITA;
+
+PROCEDURE PRC_ADICIONAR_ITEM (
+    p_id_receita   IN NUMBER,
+    p_nome_lido    IN VARCHAR2,
+    p_principio    IN VARCHAR2,
+    p_concentracao IN VARCHAR2,
+    p_corrigido    IN VARCHAR2 DEFAULT 'N'
+)
+IS
+    v_qtd     NUMBER;
+    v_res     VARCHAR2(20);
+    v_id_med  NUMBER;
+    v_orient  VARCHAR2(400);
+    v_erro    VARCHAR2(4000);
+    v_codigo  NUMBER;
+BEGIN
+    SELECT COUNT(*) INTO v_qtd FROM T_DF_RECEITA WHERE ID_RECEITA = p_id_receita;
+    IF v_qtd = 0 THEN
+        RAISE_APPLICATION_ERROR(-20061, 'PRC_ADICIONAR_ITEM: receita ' || p_id_receita || ' nao encontrada');
+    END IF;
+
+    P_AVALIAR(p_principio, p_concentracao, v_res, v_id_med);
+
+    -- o app nunca sugere trocar de remedio: so informa e manda confirmar na farmacia
+    IF v_res = 'GRATUITO' THEN
+        v_orient := 'Gratuito no Farmacia Popular. Leve a receita valida e um documento oficial com foto e CPF a uma farmacia credenciada (selo "Aqui tem Farmacia Popular").';
+    ELSIF v_res = 'DOSAGEM_DIVERGENTE' THEN
+        v_orient := 'O principio ativo esta no elenco, mas a dosagem da receita nao. Confirme na farmacia credenciada. Nao troque o remedio por conta propria.';
+    ELSE
+        v_orient := 'Nao consta no elenco gratuito do Farmacia Popular. Pergunte na farmacia ou na unidade de saude.';
+    END IF;
+
+    INSERT INTO T_DF_RECEITA_ITEM (ID_RECEITA, DES_NOME_LIDO, DES_PRINCIPIO_ATIVO, DES_CONCENTRACAO,
+                                   STA_CORRIGIDO, RESULTADO, ID_MEDICAMENTO, DES_ORIENTACAO)
+    VALUES (p_id_receita, p_nome_lido, p_principio, p_concentracao,
+            UPPER(p_corrigido), v_res, v_id_med, v_orient);
+EXCEPTION
+    WHEN OTHERS THEN
+        v_codigo := SQLCODE;
+        v_erro   := SQLERRM;
+        INSERT INTO T_DF_LOG_ERRO (NOME_PROCEDURE, CODIGO_ERRO, MENSAGEM_ERRO, DATA_ERRO, USUARIO_BANCO)
+        VALUES ('PRC_ADICIONAR_ITEM', v_codigo, v_erro, SYSDATE, USER);
+        RAISE;
+END PRC_ADICIONAR_ITEM;
+
+PROCEDURE PRC_REL_RECEITA (
+    p_id_receita IN NUMBER
+)
+IS
+    v_nome   T_DF_PESSOA.NOME%TYPE;
+    v_grat   NUMBER := 0;
+    v_total  NUMBER := 0;
+BEGIN
+    BEGIN
+        SELECT p.NOME INTO v_nome
+        FROM T_DF_RECEITA r JOIN T_DF_PESSOA p ON p.ID_PESSOA = r.ID_PESSOA
+        WHERE r.ID_RECEITA = p_id_receita;
+    EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+            RAISE_APPLICATION_ERROR(-20061, 'PRC_REL_RECEITA: receita ' || p_id_receita || ' nao encontrada');
+    END;
+
+    DBMS_OUTPUT.PUT_LINE('=== RECEITA ' || p_id_receita || ' - ' || v_nome || ' ===');
+    FOR r IN (SELECT DES_PRINCIPIO_ATIVO, DES_CONCENTRACAO, RESULTADO
+              FROM T_DF_RECEITA_ITEM
+              WHERE ID_RECEITA = p_id_receita
+              ORDER BY ID_ITEM) LOOP
+        DBMS_OUTPUT.PUT_LINE(RPAD(r.DES_PRINCIPIO_ATIVO || ' ' || r.DES_CONCENTRACAO, 32) || r.RESULTADO);
+        v_total := v_total + 1;
+        IF r.RESULTADO = 'GRATUITO' THEN
+            v_grat := v_grat + 1;
+        END IF;
+    END LOOP;
+    DBMS_OUTPUT.PUT_LINE('Gratuitos: ' || v_grat || ' de ' || v_total || ' (confirme sempre na farmacia credenciada)');
+END PRC_REL_RECEITA;
+
+END PKG_FARMACIA_POPULAR;
+/
+
+------------------------------------------------------------
 -- TRIGGER recriada: agora delega a gravacao para PKG_AUDITORIA
 ------------------------------------------------------------
 CREATE OR REPLACE TRIGGER TRG_DF_AUDITORIA_CASO
@@ -616,5 +819,31 @@ BEGIN
 END;
 /
 
--- Desfaz os testes 5, 8 e 10 (os dados voltam ao estado da carga, igual ao MongoDB)
+-- Teste 11: Farmacia Popular - a pessoa conferiu 4 remedios da receita; a tabela decide o que e gratuito
+-- (desfeito no ROLLBACK do fim do script)
+DECLARE
+    v_receita NUMBER;
+BEGIN
+    PKG_FARMACIA_POPULAR.PRC_REGISTRAR_RECEITA(3, NULL, v_receita);
+    PKG_FARMACIA_POPULAR.PRC_ADICIONAR_ITEM(v_receita, 'Losartana 50 mg', 'losartana', '50mg');
+    PKG_FARMACIA_POPULAR.PRC_ADICIONAR_ITEM(v_receita, 'Metformina 500', 'Metformina', '500 mg', 'S');
+    PKG_FARMACIA_POPULAR.PRC_ADICIONAR_ITEM(v_receita, 'Atenolol 100', 'atenolol', '100mg');
+    PKG_FARMACIA_POPULAR.PRC_ADICIONAR_ITEM(v_receita, 'Rivotril 2mg', 'clonazepam', '2mg');
+    PKG_FARMACIA_POPULAR.PRC_REL_RECEITA(v_receita);
+END;
+/
+SELECT i.DES_NOME_LIDO, i.DES_PRINCIPIO_ATIVO, i.DES_CONCENTRACAO, i.STA_CORRIGIDO, i.RESULTADO, SUBSTR(i.DES_ORIENTACAO, 1, 70) AS ORIENTACAO
+FROM T_DF_RECEITA_ITEM i
+ORDER BY i.ID_ITEM;
+
+-- Teste 12: erro tratado - item para receita inexistente
+BEGIN
+    PKG_FARMACIA_POPULAR.PRC_ADICIONAR_ITEM(9999, 'x', 'losartana', '50mg');
+EXCEPTION
+    WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE('Erro tratado: ' || SQLERRM);
+END;
+/
+
+-- Desfaz os testes 5, 8, 10 e 11 (os dados voltam ao estado da carga, igual ao MongoDB)
 ROLLBACK;
