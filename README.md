@@ -80,7 +80,7 @@ T_DF_SALARIO_MINIMO  (parâmetro de renda)      T_DF_LOG_ERRO  (erros das proced
 | Tabela | Papel |
 |---|---|
 | `T_DF_USUARIO` | Login do app: perfil `CIDADAO` ou `GESTOR` (vira a role do JWT) |
-| `T_DF_PESSOA` | Beneficiário (idade, renda familiar, **renda individual**, nº de membros) acompanhado por um usuário responsável |
+| `T_DF_PESSOA` | Beneficiário (idade, renda familiar, **renda individual**, nº de membros) acompanhado por um usuário responsável. `VLR_RENDA_INDIVIDUAL` vazio (`NULL`) = "não sei" (o app manda vazio); `0` = sem renda própria |
 | `T_DF_DOCUMENTO` | Registro, **neste banco**, de cada documento de laudo anunciado pelo evento `DocumentoRecebido`: metadados e `DES_ID_EXTERNO` (id do documento na API .NET, **sem FK**, pois os bancos são independentes). `DES_CHAVE_IDEMPOTENCIA` é única: se o RabbitMQ entregar o mesmo evento duas vezes, o Java não cria um segundo registro. Status `RECEBIDO`, `PROCESSADO` ou `ERRO` |
 | `T_DF_ORIENTACAO` | Passo a passo em linguagem simples gerado pela IA (RAG) e gravado pelo Java, com a **fonte citada** (lei ou cartilha). 1:1 com o caso; o app mobile lê pela API |
 | `T_DF_LAUDO` | Dados estruturados do laudo (ligado ao documento): CID, condição, `TIPO_CONDICAO` (`TEA`, `DEF_FISICA`, …, `OUTRA`) |
@@ -103,11 +103,14 @@ Avalia na ordem e para na primeira falha:
 3. Direito exige PcD e não há laudo de deficiência (TEA conta) → `NAO_ELEGIVEL`
 4. Direito exige um tipo específico de deficiência (ex.: a isenção de IOF exige deficiência física) e não há laudo desse tipo → `NAO_ELEGIVEL`
 5. Sem limite de renda → `ELEGIVEL`
-6. Renda (em SM) ≤ limite → `ELEGIVEL`. A renda é **per capita** (renda familiar ÷ nº de membros) na maioria dos direitos e **individual** (renda da própria pessoa) quando o critério tem `STA_RENDA_INDIVIDUAL = 'S'`, como no passe do idoso (Estatuto da Pessoa Idosa, art. 40: renda de até 2 SM)
-7. Até o limite + tolerância (padrão 20%) → `POSSIVEL` ("confirmar renda no CadÚnico")
-8. Acima → `NAO_ELEGIVEL`
+6. Direito que usa a renda individual e a pessoa não a informou (`NULL`) → `POSSIVEL` com o motivo "Informe a renda individual"
+7. Renda (em SM) ≤ limite → `ELEGIVEL`. A renda é **per capita** (renda familiar ÷ nº de membros) na maioria dos direitos e **individual** (renda da própria pessoa) quando o critério tem `STA_RENDA_INDIVIDUAL = 'S'`, como no passe do idoso (Estatuto da Pessoa Idosa, art. 40: renda de até 2 SM)
+8. Até o limite + tolerância (padrão 20%) → `POSSIVEL` ("confirmar renda no CadÚnico")
+9. Acima → `NAO_ELEGIVEL`
 
 `PRC_ABRIR_CASOS` percorre o catálogo com cursor e abre um caso para cada direito `ELEGIVEL` ou `POSSIVEL` (não duplica).
+
+`PKG_ELEGIBILIDADE.PRC_REAVALIAR_CASOS(p_id_pessoa, p_dt_ref)` deve ser chamada pelo Java **depois que a pessoa informar ou corrigir a renda ou os laudos**: atualiza os casos `ABERTO` (`POSSIVEL` ↔ `ELEGIVEL`), **remove** os `ABERTO` que deixaram de ser elegíveis (junto com a orientação da IA; o gatilho registra o `DELETE` na auditoria) e abre os que passaram a ser. Casos em qualquer outro status (`EM_ANALISE`, `PROTOCOLADO`, `CONCEDIDO`...) não são tocados.
 
 ### Gatilhos
 
@@ -120,7 +123,7 @@ Avalia na ordem e para na primeira falha:
 
 | Pacote | Conteúdo |
 |---|---|
-| `PKG_ELEGIBILIDADE` | `FN_RENDA_PER_CAPITA_SM`, `PRC_AVALIAR_DIREITO`, `FN_AVALIAR_ELEGIBILIDADE`, `PRC_ABRIR_CASOS` |
+| `PKG_ELEGIBILIDADE` | `FN_RENDA_PER_CAPITA_SM`, `PRC_AVALIAR_DIREITO`, `FN_AVALIAR_ELEGIBILIDADE`, `PRC_ABRIR_CASOS`, `PRC_REAVALIAR_CASOS` |
 | `PKG_CASOS` | `PRC_ATUALIZAR_STATUS_CASO`, `PRC_REGISTRAR_ORIENTACAO`, `FN_CASO_TO_JSON`, `PRC_EXPORTA_CASOS_JSON`, `PRC_REL_CASOS_POR_STATUS` |
 | `PKG_FARMACIA_POPULAR` | `FN_CONSULTAR_ITEM`, `PRC_REGISTRAR_RECEITA`, `PRC_ADICIONAR_ITEM`, `PRC_REL_RECEITA` (consulta de remédios no elenco; não abre casos) |
 | `PKG_AUDITORIA` | `REGISTRAR_AUDITORIA_CASO` — o Oracle não aceita gatilho dentro de pacote, então o gatilho virou uma casca fina que delega ao pacote |
@@ -131,7 +134,7 @@ As funções/procedures do `05` (avulsas) são movidas para os pacotes no `06` e
 
 Não passa pela regra de elegibilidade e **não cria casos**, então os relatórios e os números dos casos não mudam. O fluxo é: a pessoa tira a foto da receita, a IA (Java) identifica remédio, princípio ativo e dosagem, **a pessoa confere na tela** e só então o Java grava cada item com `PKG_FARMACIA_POPULAR.PRC_ADICIONAR_ITEM`. **Quem decide o que é gratuito é a tabela `T_DF_MEDICAMENTO_FP`, não a IA.**
 
-- A consulta ignora acento e maiúsculas e aceita o princípio ativo contido no nome do elenco (`metformina` acha `cloridrato de metformina`). A concentração precisa ser igual (`500 mg` = `500mg`).
+- A consulta ignora acento e maiúsculas e aceita o princípio ativo contido no nome do elenco (`metformina` acha `cloridrato de metformina`). A concentração precisa ser igual, ignorando espaços e tratando vírgula e ponto como o mesmo separador (`500 mg` = `500mg`; `2.5 mg` = `2,5mg`). A pessoa pode corrigir a dosagem na tela de conferência: o Java manda o valor corrigido e `p_corrigido = 'S'`.
 - `GRATUITO`: princípio e dosagem no elenco. `DOSAGEM_DIVERGENTE`: o princípio está no elenco, a dosagem não. `NAO_ENCONTRADO`: não consta.
 - O banco **nunca sugere trocar de remédio**: a orientação só informa o resultado e manda confirmar na farmácia credenciada. Para retirar: receita válida e documento oficial com foto e CPF, em farmácia com o selo "Aqui tem Farmácia Popular".
 - Fraldas geriátricas e absorventes ficam no elenco (`TIPO_ITEM = 'INSUMO'`), mas dependem de laudo ou de autorização própria e não são consultados por receita.
@@ -225,7 +228,7 @@ Totais: **31 casos**, **5 laudos** e **5 documentos** (36 documentos no Mongo, j
 | `03_CARGA` | Tabela final com USUARIO 6, PESSOA 5, DOCUMENTO 5, LAUDO 5, DIREITO 20, CRITERIO_DIREITO 20, MEDICAMENTO_FP 41 e **LOG_ERRO 0** |
 | `04_BLOCOS_PLSQL` | 5 pessoas com faixa etária e renda; 5 laudos com "Total PcD: 2 (sendo TEA: 1) \| Sem deficiencia: 3" |
 | `05` | Matriz de elegibilidade (60 linhas); `POSSIVEL - Renda per capita 0.2795 SM proxima do limite de 0.2500 SM...`; `NAO_ELEGIVEL - Exige laudo de deficiencia (PcD)`; `Erro tratado: ORA-20023`; `Erro tratado: ORA-20032`; `Erro: Documento ja registrado (id externo ou chave de idempotencia repetidos)`; `DOCUMENTOS_COM_A_CHAVE = 1` |
-| `06` | `Orientacao registrada para o caso 1` (2 vezes) e `Erro tratado: ORA-20041`; `Helena x BPC_IDOSO: ELEGIVEL`; `Pessoa 1: 0 caso(s) aberto(s)`; relatório com `TOTAL GERAL: 31`; o JSON do caso 1; `Erro tratado: ORA-20033`; 4 linhas de auditoria do caso 1; teste 10: `PASSE_IDOSO_INTERESTADUAL: NAO_ELEGIVEL - Renda individual 3.0228 SM acima do limite de 2.0000 SM`; teste 11 (receita): losartana e metformina `GRATUITO`, atenolol 100mg `DOSAGEM_DIVERGENTE`, clonazepam `NAO_ENCONTRADO` e `Gratuitos: 2 de 4`; teste 12: `Erro tratado: ORA-20061`; `Rollback complete.` |
+| `06` | `Orientacao registrada para o caso 1` (2 vezes) e `Erro tratado: ORA-20041`; `Helena x BPC_IDOSO: ELEGIVEL`; `Pessoa 1: 0 caso(s) aberto(s)`; relatório com `TOTAL GERAL: 31`; o JSON do caso 1; `Erro tratado: ORA-20033`; 4 linhas de auditoria do caso 1; teste 10: `PASSE_IDOSO_INTERESTADUAL: NAO_ELEGIVEL - Renda individual 3.0228 SM acima do limite de 2.0000 SM`; teste 11 (receita): losartana, metformina e timolol `2.5 mg` `GRATUITO`, atenolol 100mg `DOSAGEM_DIVERGENTE`, clonazepam `NAO_ENCONTRADO` e `Gratuitos: 3 de 5`; teste 12: `Erro tratado: ORA-20061`; teste 13: `a) renda vazia: POSSIVEL - Informe a renda individual`, `b) renda 906 -> caso ELEGIVEL` e `c) limite 0,3 SM -> caso removido (nao elegivel)`; `Rollback complete.` |
 | `07` | 9, 22 e 4 linhas e totais 31 e 5 |
 
 Se algum script falhar, confira a mensagem na aba **Script Output**. Para refazer tudo do zero, rode `00_DROP.sql` e depois os demais em ordem (rodar `01` a `03` duas vezes sem o `00` gera erro de objeto já existente e de chave duplicada).
@@ -312,9 +315,13 @@ Regra da renda individual (teste 10 do `06`): Helena com 3 SM numa família de 4
 
 ![T_DF_MEDICAMENTO_FP](evidencias/26_t_df_medicamento_fp.png)
 
-Teste 11 do `06`: receita de Helena com 4 remédios conferidos; a tabela decide o que é gratuito (2 de 4), e o item com dosagem diferente ou fora do elenco só recebe orientação para confirmar na farmácia:
+Teste 11 do `06`: receita de Helena com 5 remédios conferidos; a tabela decide o que é gratuito (3 de 5, com o timolol digitado como `2.5 mg` batendo com o `2,5mg` do elenco), e o item com dosagem diferente ou fora do elenco só recebe orientação para confirmar na farmácia:
 
 ![Teste da Farmácia Popular](evidencias/27_teste_farmacia_popular.png)
+
+Teste 13 do `06`: a renda individual vazia ("não sei") deixa o passe do idoso `POSSIVEL`; ao informar a renda, `PRC_REAVALIAR_CASOS` atualiza o caso `ABERTO` para `ELEGIVEL`; se o direito deixar de ser elegível, o caso `ABERTO` é removido e a auditoria registra o `DELETE`:
+
+![Teste da renda vazia e da reavaliação](evidencias/28_teste_renda_vazia_reavaliacao.png)
 
 ### 6.3 Evidências do MongoDB (MongoDB Compass, `_MONGOSH`)
 
@@ -361,7 +368,7 @@ Nesses prints os relatórios 1 e 2 foram impressos com `print(JSON.stringify(d))
 
 **Este banco é só do Java.** O banco da API .NET é outro e usa as migrations do próprio .NET: não há FK nem acesso direto entre os dois. A ligação é feita só por mensagem (RabbitMQ) e pelo `DES_ID_EXTERNO` do documento.
 
-**Chamadas ao banco:** a regra decide no Oracle. Use `PKG_ELEGIBILIDADE.PRC_ABRIR_CASOS(p_id_pessoa, p_dt_ref)` para avaliar e abrir os casos, `PKG_ELEGIBILIDADE.FN_AVALIAR_ELEGIBILIDADE(p_id_pessoa, p_cod_direito, p_dt_ref)` para consultar, e `PKG_CASOS.PRC_ATUALIZAR_STATUS_CASO(p_id_caso, p_novo_status, p_dt_ref)` para mudar status e `PKG_CASOS.PRC_REGISTRAR_ORIENTACAO(p_id_caso, p_passo_a_passo, p_fonte, p_modelo)` para gravar (ou substituir) a orientação gerada pela IA. Para a Farmácia Popular: `PKG_FARMACIA_POPULAR.PRC_REGISTRAR_RECEITA(p_id_pessoa, p_id_documento, p_id_receita OUT)` e, para cada remédio já conferido pela pessoa, `PKG_FARMACIA_POPULAR.PRC_ADICIONAR_ITEM(p_id_receita, p_nome_lido, p_principio, p_concentracao, p_corrigido)`. `p_dt_ref` pode ser omitido (usa `SYSDATE`) com `StoredProcedureQuery` ou `SimpleJdbcCall`.
+**Chamadas ao banco:** a regra decide no Oracle. Use `PKG_ELEGIBILIDADE.PRC_ABRIR_CASOS(p_id_pessoa, p_dt_ref)` para avaliar e abrir os casos, `PKG_ELEGIBILIDADE.PRC_REAVALIAR_CASOS(p_id_pessoa, p_dt_ref)` depois que a pessoa informar ou corrigir a renda (se o campo do app for "Não sei", grave `NULL` em `VLR_RENDA_INDIVIDUAL`, não `0`), `PKG_ELEGIBILIDADE.FN_AVALIAR_ELEGIBILIDADE(p_id_pessoa, p_cod_direito, p_dt_ref)` para consultar, e `PKG_CASOS.PRC_ATUALIZAR_STATUS_CASO(p_id_caso, p_novo_status, p_dt_ref)` para mudar status e `PKG_CASOS.PRC_REGISTRAR_ORIENTACAO(p_id_caso, p_passo_a_passo, p_fonte, p_modelo)` para gravar (ou substituir) a orientação gerada pela IA. Para a Farmácia Popular: `PKG_FARMACIA_POPULAR.PRC_REGISTRAR_RECEITA(p_id_pessoa, p_id_documento, p_id_receita OUT)` e, para cada remédio já conferido pela pessoa, `PKG_FARMACIA_POPULAR.PRC_ADICIONAR_ITEM(p_id_receita, p_nome_lido, p_principio, p_concentracao, p_corrigido)`. `p_dt_ref` pode ser omitido (usa `SYSDATE`) com `StoredProcedureQuery` ou `SimpleJdbcCall`.
 
 **Erros do banco para o `@RestControllerAdvice`:**
 
@@ -380,7 +387,7 @@ Nesses prints os relatórios 1 e 2 foram impressos com `print(JSON.stringify(d))
 | `ORA-00001` em `UK_DF_DOCUMENTO_IDEM` ou `UK_DF_DOCUMENTO_EXT` | evento/documento repetido (idempotência) | ignorar o evento ou 200 com o registro já existente |
 | `ORA-00001` em `UK_DF_USUARIO_CPF` / `_EMAIL` | cadastro duplicado | 409 |
 
-**Flyway:** copie `flyway/V1` a `V5` para `src/main/resources/db/migration` (com `spring.jpa.hibernate.ddl-auto=validate`). Foram testadas num schema Oracle limpo. `V5` abre os casos da demo; remova se o ambiente não deve ter dados de demonstração.
+**Flyway:** copie `flyway/V1` a `V5` para `src/main/resources/db/migration` (com `spring.jpa.hibernate.ddl-auto=validate`). Foram testadas num schema Oracle limpo. `V5` abre os casos da demo; remova se o ambiente não deve ter dados de demonstração. As migrations `V1` a `V5` ficam **congeladas** a partir do momento em que forem aplicadas em algum ambiente: qualquer mudança nova entra em `V6`, `V7`... (o Flyway recusa a migration já aplicada se o arquivo mudar).
 
 **Eventos RabbitMQ (previstos no documento do projeto):** `DocumentoRecebido` (o .NET publica; o Java grava em `T_DF_DOCUMENTO` com status `RECEBIDO` e depois `PROCESSADO`, usando a chave de idempotência para não duplicar), `DireitoIdentificado` (após `PRC_ABRIR_CASOS`), `PrazoVencendo` e `CasoParado` (consultas por `DT_PRAZO` e `DT_ATUALIZACAO` em `T_DF_CASO`).
 
