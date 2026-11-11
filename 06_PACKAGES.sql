@@ -82,6 +82,14 @@ CREATE OR REPLACE PACKAGE PKG_ELEGIBILIDADE IS
         p_dt_ref    IN DATE DEFAULT SYSDATE
     );
 
+    -- chamada pelo Java depois que a pessoa informa ou corrige a renda ou os laudos:
+    -- atualiza os casos ABERTO (POSSIVEL <-> ELEGIVEL), remove os ABERTO que deixaram de ser elegiveis
+    -- e abre os que passaram a ser. Casos em outros status nao sao tocados.
+    PROCEDURE PRC_REAVALIAR_CASOS (
+        p_id_pessoa IN NUMBER,
+        p_dt_ref    IN DATE DEFAULT SYSDATE
+    );
+
 END PKG_ELEGIBILIDADE;
 /
 
@@ -181,6 +189,9 @@ BEGIN
     ELSIF v_tipo = 0 THEN
         p_status := 'NAO_ELEGIVEL';
         p_motivo := 'Exige laudo de deficiencia do tipo ' || v_crit.COD_TIPO_EXIGIDO;
+    ELSIF v_crit.STA_RENDA_INDIVIDUAL = 'S' AND v_crit.FRC_SM_MAX IS NOT NULL AND v_fracao IS NULL THEN
+        p_status := 'POSSIVEL';
+        p_motivo := 'Informe a renda individual';
     ELSIF v_crit.FRC_SM_MAX IS NULL THEN
         p_status := 'ELEGIVEL';
         p_motivo := 'Criterios atendidos (sem limite de renda)';
@@ -265,6 +276,51 @@ EXCEPTION
         VALUES ('PRC_ABRIR_CASOS', v_codigo, v_erro, SYSDATE, USER);
         DBMS_OUTPUT.PUT_LINE('Erro [' || v_codigo || ']: ' || v_erro);
 END PRC_ABRIR_CASOS;
+
+PROCEDURE PRC_REAVALIAR_CASOS (
+    p_id_pessoa IN NUMBER,
+    p_dt_ref    IN DATE
+)
+IS
+    v_status      VARCHAR2(15);
+    v_motivo      VARCHAR2(300);
+    v_atualizados NUMBER := 0;
+    v_removidos   NUMBER := 0;
+    v_erro        VARCHAR2(4000);
+    v_codigo      NUMBER;
+BEGIN
+    FOR r IN (SELECT ID_CASO, ID_DIREITO, RESULTADO_AVALIACAO, DES_MOTIVO
+              FROM T_DF_CASO
+              WHERE ID_PESSOA = p_id_pessoa AND STATUS = 'ABERTO'
+              ORDER BY ID_CASO) LOOP
+        PRC_AVALIAR_DIREITO(p_id_pessoa, r.ID_DIREITO, p_dt_ref, v_status, v_motivo);
+
+        IF v_status = 'NAO_ELEGIVEL' THEN
+            -- a orientacao da IA (1:1) some junto com o caso; o gatilho de auditoria registra o DELETE
+            DELETE FROM T_DF_ORIENTACAO WHERE ID_CASO = r.ID_CASO;
+            DELETE FROM T_DF_CASO WHERE ID_CASO = r.ID_CASO;
+            v_removidos := v_removidos + 1;
+        ELSIF v_status <> r.RESULTADO_AVALIACAO OR v_motivo <> r.DES_MOTIVO THEN
+            UPDATE T_DF_CASO
+            SET RESULTADO_AVALIACAO = v_status,
+                DES_MOTIVO = v_motivo,
+                DT_ATUALIZACAO = p_dt_ref
+            WHERE ID_CASO = r.ID_CASO;
+            v_atualizados := v_atualizados + 1;
+        END IF;
+    END LOOP;
+
+    PRC_ABRIR_CASOS(p_id_pessoa, p_dt_ref);
+    DBMS_OUTPUT.PUT_LINE('Pessoa ' || p_id_pessoa || ': ' || v_atualizados || ' caso(s) atualizado(s), '
+                         || v_removidos || ' removido(s)');
+EXCEPTION
+    WHEN OTHERS THEN
+        v_codigo := SQLCODE;
+        v_erro   := SQLERRM;
+        INSERT INTO T_DF_LOG_ERRO (NOME_PROCEDURE, CODIGO_ERRO, MENSAGEM_ERRO, DATA_ERRO, USUARIO_BANCO)
+        VALUES ('PRC_REAVALIAR_CASOS', v_codigo, v_erro, SYSDATE, USER);
+        RAISE;
+END PRC_REAVALIAR_CASOS;
 
 END PKG_ELEGIBILIDADE;
 /
@@ -531,7 +587,7 @@ BEGIN
 END F_NORM;
 
 -- o principio ativo digitado precisa estar contido no nome do elenco (ex.: "metformina" acha "cloridrato de metformina");
--- a concentracao precisa ser igual (ignorando espacos); principio achado com outra dosagem = DOSAGEM_DIVERGENTE
+-- a concentracao precisa ser igual (ignorando espacos e tratando virgula e ponto como o mesmo separador: 2,5mg = 2.5 mg); principio achado com outra dosagem = DOSAGEM_DIVERGENTE
 PROCEDURE P_AVALIAR (
     p_principio    IN  VARCHAR2,
     p_concentracao IN  VARCHAR2,
@@ -540,7 +596,7 @@ PROCEDURE P_AVALIAR (
 )
 IS
     v_p      VARCHAR2(200) := F_NORM(p_principio);
-    v_c      VARCHAR2(100) := REPLACE(F_NORM(p_concentracao), ' ', '');
+    v_c      VARCHAR2(100) := REPLACE(REPLACE(F_NORM(p_concentracao), ' ', ''), ',', '.');
     v_achou  BOOLEAN := FALSE;
 BEGIN
     p_resultado := 'NAO_ENCONTRADO';
@@ -559,7 +615,7 @@ BEGIN
                 p_resultado := 'DOSAGEM_DIVERGENTE';
                 p_id_med    := r.ID_MEDICAMENTO;
             END IF;
-            IF REPLACE(F_NORM(r.DES_CONCENTRACAO), ' ', '') = v_c THEN
+            IF REPLACE(REPLACE(F_NORM(r.DES_CONCENTRACAO), ' ', ''), ',', '.') = v_c THEN
                 p_resultado := 'GRATUITO';
                 p_id_med    := r.ID_MEDICAMENTO;
                 RETURN;
@@ -819,7 +875,7 @@ BEGIN
 END;
 /
 
--- Teste 11: Farmacia Popular - a pessoa conferiu 4 remedios da receita; a tabela decide o que e gratuito
+-- Teste 11: Farmacia Popular - a pessoa conferiu 5 remedios da receita (timolol 2.5 mg com ponto = 2,5mg do elenco); a tabela decide o que e gratuito
 -- (desfeito no ROLLBACK do fim do script)
 DECLARE
     v_receita NUMBER;
@@ -828,6 +884,7 @@ BEGIN
     PKG_FARMACIA_POPULAR.PRC_ADICIONAR_ITEM(v_receita, 'Losartana 50 mg', 'losartana', '50mg');
     PKG_FARMACIA_POPULAR.PRC_ADICIONAR_ITEM(v_receita, 'Metformina 500', 'Metformina', '500 mg', 'S');
     PKG_FARMACIA_POPULAR.PRC_ADICIONAR_ITEM(v_receita, 'Atenolol 100', 'atenolol', '100mg');
+    PKG_FARMACIA_POPULAR.PRC_ADICIONAR_ITEM(v_receita, 'Timolol 2.5 mg', 'timolol', '2.5 mg', 'S');
     PKG_FARMACIA_POPULAR.PRC_ADICIONAR_ITEM(v_receita, 'Rivotril 2mg', 'clonazepam', '2mg');
     PKG_FARMACIA_POPULAR.PRC_REL_RECEITA(v_receita);
 END;
@@ -845,5 +902,48 @@ EXCEPTION
 END;
 /
 
--- Desfaz os testes 5, 8, 10 e 11 (os dados voltam ao estado da carga, igual ao MongoDB)
+-- Teste 13: renda individual vazia ("nao sei") e reavaliacao dos casos (Rita, passe do idoso, caso ABERTO)
+-- (desfeito no ROLLBACK do fim do script)
+DECLARE
+    v_status VARCHAR2(15);
+    v_motivo VARCHAR2(300);
+    v_id     NUMBER;
+
+    PROCEDURE mostra (p_passo IN VARCHAR2) IS
+        v_res VARCHAR2(15);
+        v_mot VARCHAR2(300);
+    BEGIN
+        SELECT c.RESULTADO_AVALIACAO, c.DES_MOTIVO INTO v_res, v_mot
+        FROM T_DF_CASO c WHERE c.ID_PESSOA = 5 AND c.ID_DIREITO = v_id;
+        DBMS_OUTPUT.PUT_LINE(p_passo || ' -> caso ' || v_res || ' - ' || v_mot);
+    EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+            DBMS_OUTPUT.PUT_LINE(p_passo || ' -> caso removido (nao elegivel)');
+    END;
+BEGIN
+    SELECT ID_DIREITO INTO v_id FROM T_DF_DIREITO WHERE COD_DIREITO = 'PASSE_IDOSO_INTERESTADUAL';
+
+    -- a) a pessoa marcou "Nao sei": renda individual vazia
+    UPDATE T_DF_PESSOA SET VLR_RENDA_INDIVIDUAL = NULL WHERE ID_PESSOA = 5;
+    PKG_ELEGIBILIDADE.PRC_AVALIAR_DIREITO(5, v_id, DATE '2026-11-05', v_status, v_motivo);
+    DBMS_OUTPUT.PUT_LINE('a) renda vazia: ' || v_status || ' - ' || v_motivo);
+    PKG_ELEGIBILIDADE.PRC_REAVALIAR_CASOS(5, DATE '2026-11-05');
+    mostra('a) apos reavaliar');
+
+    -- b) a pessoa informa a renda (906): o caso volta a ELEGIVEL
+    UPDATE T_DF_PESSOA SET VLR_RENDA_INDIVIDUAL = 906 WHERE ID_PESSOA = 5;
+    PKG_ELEGIBILIDADE.PRC_REAVALIAR_CASOS(5, DATE '2026-11-05');
+    mostra('b) renda 906');
+
+    -- c) se o limite do direito cair para 0,3 SM, o caso ABERTO deixa de ser elegivel e e removido
+    UPDATE T_DF_CRITERIO_DIREITO SET FRC_SM_MAX = 0.3 WHERE ID_DIREITO = v_id;
+    PKG_ELEGIBILIDADE.PRC_REAVALIAR_CASOS(5, DATE '2026-11-05');
+    mostra('c) limite 0,3 SM');
+END;
+/
+SELECT TIPO_OPERACAO, STATUS_ANTERIOR, STATUS_NOVO, VALORES_ANTERIORES
+FROM T_DF_AUDITORIA_CASO
+WHERE TIPO_OPERACAO = 'DELETE';
+
+-- Desfaz os testes 5, 8, 10, 11 e 13 (os dados voltam ao estado da carga, igual ao MongoDB)
 ROLLBACK;

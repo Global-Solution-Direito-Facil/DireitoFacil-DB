@@ -118,6 +118,9 @@ BEGIN
     ELSIF v_tipo = 0 THEN
         p_status := 'NAO_ELEGIVEL';
         p_motivo := 'Exige laudo de deficiencia do tipo ' || v_crit.COD_TIPO_EXIGIDO;
+    ELSIF v_crit.STA_RENDA_INDIVIDUAL = 'S' AND v_crit.FRC_SM_MAX IS NOT NULL AND v_fracao IS NULL THEN
+        p_status := 'POSSIVEL';
+        p_motivo := 'Informe a renda individual';
     ELSIF v_crit.FRC_SM_MAX IS NULL THEN
         p_status := 'ELEGIVEL';
         p_motivo := 'Criterios atendidos (sem limite de renda)';
